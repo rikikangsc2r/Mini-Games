@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
 import { useOnlineGame, BaseOnlineGameState } from '../hooks/useOnlineGame';
@@ -46,6 +46,15 @@ const UNICODE_PIECES: Record<PieceColor, Record<PieceType, string>> = {
   b: { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚' },
   w: { p: '♙', n: '♘', b: '♗', r: '♖', q: '♕', k: '♔' },
 };
+
+// --- Custom Hook ---
+function usePrevious<T>(value: T): T | undefined {
+    const ref = useRef<T | undefined>(undefined);
+    useEffect(() => {
+        ref.current = value;
+    }, [value]);
+    return ref.current;
+}
 
 // --- React Components ---
 
@@ -106,6 +115,8 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         handleNameSubmit, handleEnterRoom, handleOnlineBack, handleRematch, changeGameMode,
         handleChangeNameRequest,
     } = useOnlineGame('chess-games', createInitialOnlineState, reconstructOnlineState);
+    
+    const prevOnlineGameState = usePrevious(onlineGameState);
 
     // --- Memos and Callbacks ---
     const board = useMemo<Square[][]>(() => game.board().map((row: (Piece | null)[], r: number) => row.map((piece, f) => ({
@@ -137,20 +148,42 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         return { isWhite: isWhiteForMe, myColor: myColorForThisGame, isFlipped: boardIsFlipped, myTurn: isMyTurn };
     }, [gameMode, onlineGameState, playerSymbol, game]);
     
-    // Sync local game state with online FEN
+    // Sync game state from Firebase and play sounds for opponent's moves
     useEffect(() => {
-        if (gameMode === 'online' && onlineGameState && game.fen() !== onlineGameState.fen) {
+        if (gameMode !== 'online' || !onlineGameState) return;
+
+        // On initial load, just sync the FEN without playing a sound
+        if (!prevOnlineGameState) {
+            setGame(new ChessJS(onlineGameState.fen));
+            return;
+        }
+
+        // When FEN changes, it might be a move. Update board and maybe play a sound.
+        if (onlineGameState.fen !== prevOnlineGameState.fen) {
             const newGame = new ChessJS(onlineGameState.fen);
             setGame(newGame);
-            const history = newGame.history({ verbose: true });
-            const lastHistoryMove = history[history.length-1];
-            if(lastHistoryMove?.captured) {
-              playSound('back');
-            } else if (history.length > 0) {
-              playSound('place');
+
+            // Play sound only for the opponent's move, not our own.
+            // A move just happened, so if the new turn is our color, it means the opponent moved.
+            const isOpponentMove = newGame.turn() === myColor;
+
+            if (isOpponentMove && onlineGameState.lastMove) {
+                const oldGame = new ChessJS(prevOnlineGameState.fen);
+                const wasCapture = !!oldGame.get(onlineGameState.lastMove.to);
+                
+                if (wasCapture) {
+                    playSound('back'); // Capture sound
+                } else {
+                    playSound('place'); // Simple move sound
+                }
+
+                // Play a notification sound if the opponent's move puts us in check.
+                if (newGame.in_check()) {
+                    playSound('notify');
+                }
             }
         }
-    }, [gameMode, onlineGameState, game, playSound]);
+    }, [gameMode, onlineGameState, prevOnlineGameState, myColor, playSound]);
 
     // Update captured pieces whenever the board changes
     useEffect(() => {

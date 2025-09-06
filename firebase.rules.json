@@ -70,19 +70,19 @@
 
         // --- Game-specific validations ---
         "board": {
-            ".validate": "($game_key === 'games' || $game_key === 'gobblet-games') ? newData.exists() && newData.isObject() : !newData.exists()"
+            ".validate": "($game_key === 'games' || $game_key === 'gobblet-games') ? newData.exists() && newData.hasChildren() : !newData.exists()"
         },
         "winningLine": {
-             ".validate": "($game_key === 'games' || $game_key === 'gobblet-games') ? !newData.exists() || newData.isObject() || newData.isArray() : !newData.exists()"
+             ".validate": "($game_key === 'games' || $game_key === 'gobblet-games') ? !newData.exists() || newData.hasChildren() : !newData.exists()"
         },
         "homePiles": {
-            ".validate": "$game_key === 'gobblet-games' ? newData.exists() && newData.isObject() : !newData.exists()"
+            ".validate": "$game_key === 'gobblet-games' ? newData.exists() && newData.hasChildren(['X', 'O']) : !newData.exists()"
         },
         "fen": {
             ".validate": "$game_key === 'chess-games' ? newData.exists() && newData.isString() : !newData.exists()"
         },
         "lastMove": {
-             ".validate": "$game_key === 'chess-games' ? !newData.exists() || newData.isObject() || newData.val() === null : !newData.exists()"
+             ".validate": "$game_key === 'chess-games' ? !newData.exists() || newData.val() === null || newData.hasChildren(['from', 'to']) : !newData.exists()"
         },
 
         // Disallow any other unknown top-level properties

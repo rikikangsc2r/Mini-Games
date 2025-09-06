@@ -1,6 +1,103 @@
 {
   "rules": {
-    ".read": true,
-    ".write": true
+    // Apply a common set of security rules to all game types
+    "$game_key": {
+      ".validate": "$game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'chess-games'",
+      
+      "$room_id": {
+        // Anyone can read a game's state. This is required for the "share room ID" feature to work.
+        ".read": true,
+
+        // Writes are permitted but are heavily scrutinized by the validation rules below.
+        ".write": true,
+
+        // --- CORE VALIDATION RULE ---
+        // Enforce the data schema for every game room on every write operation.
+        // This prevents data corruption and is a massive security improvement.
+        ".validate": "newData.hasChildren(['players', 'createdAt', 'currentPlayer', 'startingPlayer', 'rematch'])",
+
+        "players": {
+          "X": {
+            // Player X must have a deviceId and a name. Once set, the deviceId cannot be changed.
+            ".validate": "
+              newData.hasChildren(['deviceId', 'name']) &&
+              newData.child('deviceId').isString() &&
+              newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length < 30 &&
+              (!data.exists() || data.child('deviceId').val() === newData.child('deviceId').val())
+            "
+          },
+          "O": {
+             // Player O is optional, but if present, must be valid. deviceId is immutable.
+            ".validate": "
+              !newData.exists() || (
+                newData.hasChildren(['deviceId', 'name']) &&
+                newData.child('deviceId').isString() &&
+                newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length < 30 &&
+                (!data.exists() || data.child('deviceId').val() === newData.child('deviceId').val())
+              )
+            "
+          },
+          // Disallow other properties like 'players/Y'
+          "$other": { ".validate": "$other === 'X' || $other === 'O'" }
+        },
+
+        "currentPlayer": {
+          ".validate": "newData.isString() && (newData.val() === 'X' || newData.val() === 'O')"
+        },
+
+        "startingPlayer": {
+          ".validate": "newData.isString() && (newData.val() === 'X' || newData.val() === 'O')"
+        },
+
+        "winner": {
+          // Winner is optional. If set, it must be a valid value and can only be set once (from non-existent to a value).
+          ".validate": "
+            !newData.exists() || (
+              !data.exists() &&
+              newData.isString() && (newData.val() === 'X' || newData.val() === 'O' || newData.val() === 'Draw')
+            )
+          "
+        },
+
+        "createdAt": {
+          // Must be a number. On creation, it must be the server timestamp. It cannot be changed after creation.
+          ".validate": "newData.isNumber() && (!data.exists() ? newData.val() === now : newData.val() === data.val())"
+        },
+
+        "rematch": {
+          ".validate": "newData.hasChildren(['X', 'O']) && newData.child('X').isBoolean() && newData.child('O').isBoolean()"
+        },
+
+        // --- Game-specific validations ---
+        "board": {
+            ".validate": "($game_key === 'games' || $game_key === 'gobblet-games') ? newData.exists() && newData.isObject() : !newData.exists()"
+        },
+        "winningLine": {
+             ".validate": "($game_key === 'games' || $game_key === 'gobblet-games') ? !newData.exists() || newData.isObject() || newData.isArray() : !newData.exists()"
+        },
+        "homePiles": {
+            ".validate": "$game_key === 'gobblet-games' ? newData.exists() && newData.isObject() : !newData.exists()"
+        },
+        "fen": {
+            ".validate": "$game_key === 'chess-games' ? newData.exists() && newData.isString() : !newData.exists()"
+        },
+        "lastMove": {
+             ".validate": "$game_key === 'chess-games' ? !newData.exists() || newData.isObject() || newData.val() === null : !newData.exists()"
+        },
+
+        // Disallow any other unknown top-level properties
+        "$other": {
+          ".validate": "
+            $other === 'players' || $other === 'createdAt' || $other === 'currentPlayer' ||
+            $other === 'startingPlayer' || $other === 'rematch' || $other === 'winner' ||
+            $other === 'board' || $other === 'winningLine' || $other === 'homePiles' ||
+            $other === 'fen' || $other === 'lastMove'
+          "
+        }
+      }
+    },
+    // Default-deny: Disallow reads/writes to any path not explicitly allowed above.
+    ".read": false,
+    ".write": false
   }
 }

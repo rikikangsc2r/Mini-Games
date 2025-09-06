@@ -158,9 +158,15 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const roomRef = db.ref(`games/${roomId}`);
     const listener = roomRef.on('value', (snapshot: any) => {
         if (snapshot.exists()) {
-            const gameData: OnlineGameState = snapshot.val();
-            setOnlineGameState(gameData);
-            if (gameMode === 'online-lobby' && gameData.players.O) {
+            const gameData = snapshot.val();
+            // Sanitize Firebase data: ensure board and winningLine are always arrays to prevent runtime errors.
+            const sanitizedGameData: OnlineGameState = {
+                ...gameData,
+                board: gameData.board || Array(9).fill(null),
+                winningLine: gameData.winningLine || [],
+            };
+            setOnlineGameState(sanitizedGameData);
+            if (gameMode === 'online-lobby' && gameData.players?.O) {
                 setGameMode('online-game');
             }
         } else {

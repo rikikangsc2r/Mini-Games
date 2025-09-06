@@ -33,26 +33,42 @@ const Square: React.FC<{ value: Player | null; onClick: () => void; isWinning: b
   </button>
 );
 
-type GameMode = 'menu' | 'local' | 'online-menu' | 'online-lobby' | 'online-game';
+type GameMode = 'menu' | 'local' | 'online';
+type OnlineStep = 'name' | 'room' | 'game';
+
+interface OnlinePlayer {
+    deviceId: string;
+    name: string;
+}
 
 interface OnlineGameState {
     board: (Player | null)[];
     currentPlayer: Player;
     winner: Player | 'Draw' | null;
     winningLine: number[];
-    players: { X: string | null; O: string | null; };
+    players: {
+        X: OnlinePlayer | null;
+        O: OnlinePlayer | null;
+    };
+    createdAt: number;
+    rematch: { X: boolean; O: boolean };
+    startingPlayer: Player;
 }
 
 const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [gameMode, setGameMode] = useState<GameMode>('menu');
+  const [onlineStep, setOnlineStep] = useState<OnlineStep>('name');
   
   // State game online
+  const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
   const [playerSymbol, setPlayerSymbol] = useState<Player | null>(null);
   const [onlineGameState, setOnlineGameState] = useState<OnlineGameState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const joinRoomInputRef = useRef<HTMLInputElement>(null);
+  
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const roomInputRef = useRef<HTMLInputElement>(null);
   const deviceId = useRef<string>(getDeviceId());
 
   // State game lokal
@@ -63,39 +79,13 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const db = firebase.database();
 
-  // Logika untuk bergabung kembali saat komponen dimuat
   useEffect(() => {
-    const savedRoomId = localStorage.getItem('tictactoe_roomId');
-    const savedPlayerSymbol = localStorage.getItem('tictactoe_playerSymbol') as Player | null;
-
-    if (savedRoomId && savedPlayerSymbol) {
-      const roomRef = db.ref(`games/${savedRoomId}`);
-      roomRef.get().then((snapshot: any) => {
-        if (snapshot.exists()) {
-          const gameData: OnlineGameState = snapshot.val();
-          if (gameData.players && gameData.players[savedPlayerSymbol] === deviceId.current) {
-            setRoomId(savedRoomId);
-            setPlayerSymbol(savedPlayerSymbol);
-            if (savedPlayerSymbol === 'X' && !gameData.players.O) {
-              setGameMode('online-lobby');
-            } else {
-              setGameMode('online-game');
-            }
-          } else {
-            localStorage.removeItem('tictactoe_roomId');
-            localStorage.removeItem('tictactoe_playerSymbol');
-          }
-        } else {
-            localStorage.removeItem('tictactoe_roomId');
-            localStorage.removeItem('tictactoe_playerSymbol');
-        }
-      }).finally(() => {
-        setIsLoading(false);
-      });
-    } else {
-        setIsLoading(false);
+    const storedName = localStorage.getItem('playerName');
+    if (storedName) {
+      setPlayerName(storedName);
+      setOnlineStep('room');
     }
-  }, [db]);
+  }, []);
 
   const calculateWinner = useCallback((squares: (Player | null)[]): { winner: Player | 'Draw', line: number[] } | null => {
     const lines = [
@@ -142,93 +132,121 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   // Logika game online
-  const handleCreateRoom = useCallback(async () => {
-    setIsLoading(true);
-    setError('');
-    const newRoomId = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const newGame: OnlineGameState = {
-        board: Array(9).fill(null),
-        currentPlayer: 'X',
-        winner: null,
-        winningLine: [],
-        players: { X: deviceId.current, O: null },
-    };
-    try {
-        await db.ref(`games/${newRoomId}`).set(newGame);
-        localStorage.setItem('tictactoe_roomId', newRoomId);
-        localStorage.setItem('tictactoe_playerSymbol', 'X');
-        setRoomId(newRoomId);
-        setPlayerSymbol('X');
-        setGameMode('online-lobby');
-    } catch (e) {
-        setError('Gagal membuat room. Coba lagi.');
-        console.error(e);
-    } finally {
-        setIsLoading(false);
-    }
-  }, [db]);
+  const handleNameSubmit = () => {
+      const name = nameInputRef.current?.value.trim();
+      if (name) {
+          setPlayerName(name);
+          localStorage.setItem('playerName', name);
+          setOnlineStep('room');
+      } else {
+          setError('Nama tidak boleh kosong.');
+      }
+  };
 
-  const handleJoinRoom = useCallback(async () => {
-      setIsLoading(true);
-      setError('');
-      const joinRoomId = joinRoomInputRef.current?.value.toUpperCase().trim();
-      if (!joinRoomId) {
-          setError('Masukkan ID room.');
-          setIsLoading(false);
+  const handleEnterRoom = useCallback(async () => {
+      const enteredRoomId = roomInputRef.current?.value.trim().toUpperCase();
+      if (!enteredRoomId) {
+          setError('Nama room tidak boleh kosong.');
           return;
       }
-      const roomRef = db.ref(`games/${joinRoomId}`);
+      setIsLoading(true);
+      setError('');
+      
+      const roomRef = db.ref(`games/${enteredRoomId}`);
       try {
           const snapshot = await roomRef.get();
-          if (snapshot.exists()) {
-              const gameData: OnlineGameState = snapshot.val();
-              if (gameData.players.O && gameData.players.O !== deviceId.current) {
-                  setError('Room sudah penuh.');
-              } else {
-                  await roomRef.child('players/O').set(deviceId.current);
-                  localStorage.setItem('tictactoe_roomId', joinRoomId);
-                  localStorage.setItem('tictactoe_playerSymbol', 'O');
-                  setRoomId(joinRoomId);
+          const gameData: OnlineGameState | null = snapshot.val();
+          const isExpired = gameData && (Date.now() - gameData.createdAt > 3600 * 1000); // 1 jam
+
+          // Buat room baru jika tidak ada atau sudah kedaluwarsa
+          if (!snapshot.exists() || isExpired) {
+              const newGame: OnlineGameState = {
+                  board: Array(9).fill(null),
+                  currentPlayer: 'X',
+                  winner: null,
+                  winningLine: [],
+                  players: { X: { deviceId: deviceId.current, name: playerName }, O: null },
+                  createdAt: firebase.database.ServerValue.TIMESTAMP,
+                  rematch: { X: false, O: false },
+                  startingPlayer: 'X',
+              };
+              await roomRef.set(newGame);
+              setRoomId(enteredRoomId);
+              setPlayerSymbol('X');
+              localStorage.setItem('tictactoe_roomId', enteredRoomId);
+              setOnlineStep('game');
+          } else { // Gabung room yang ada
+              if (gameData.players.X?.deviceId === deviceId.current) { // Gabung kembali sebagai X
+                  setRoomId(enteredRoomId);
+                  setPlayerSymbol('X');
+                  setOnlineStep('game');
+              } else if (gameData.players.O?.deviceId === deviceId.current) { // Gabung kembali sebagai O
+                  setRoomId(enteredRoomId);
                   setPlayerSymbol('O');
-                  setGameMode('online-game');
+                  setOnlineStep('game');
+              } else if (!gameData.players.O) { // Bergabung sebagai O
+                  await roomRef.child('players/O').set({ deviceId: deviceId.current, name: playerName });
+                  setRoomId(enteredRoomId);
+                  setPlayerSymbol('O');
+                  localStorage.setItem('tictactoe_roomId', enteredRoomId);
+                  setOnlineStep('game');
+              } else {
+                  setError('Room sudah penuh.');
               }
-          } else {
-              setError('Room tidak ditemukan.');
           }
       } catch (e) {
-          setError('Gagal bergabung ke room. Coba lagi.');
+          setError('Gagal masuk room. Coba lagi.');
           console.error(e);
       } finally {
           setIsLoading(false);
       }
-  }, [db]);
+  }, [db, playerName]);
+
 
   useEffect(() => {
-    if (!roomId || !db) return;
+    if (onlineStep !== 'game' || !roomId || !db) return;
+    
     const roomRef = db.ref(`games/${roomId}`);
     const listener = roomRef.on('value', (snapshot: any) => {
         if (snapshot.exists()) {
             const gameData = snapshot.val();
-            const sanitizedGameData: OnlineGameState = {
+            const reconstructedBoard = Array(9).fill(null);
+            if (gameData.board && typeof gameData.board === 'object') {
+                Object.keys(gameData.board).forEach(key => {
+                    const index = parseInt(key, 10);
+                    if (!isNaN(index) && index >= 0 && index < 9) {
+                        reconstructedBoard[index] = gameData.board[key];
+                    }
+                });
+            }
+             const sanitizedGameData: OnlineGameState = {
                 ...gameData,
-                board: gameData.board || Array(9).fill(null),
+                board: reconstructedBoard,
                 winningLine: gameData.winningLine || [],
                 players: gameData.players || { X: null, O: null },
+                rematch: gameData.rematch || { X: false, O: false },
             };
             setOnlineGameState(sanitizedGameData);
-            if (gameMode === 'online-lobby' && sanitizedGameData.players.O) {
-                setGameMode('online-game');
+
+            // Cek untuk memulai rematch
+            if (sanitizedGameData.rematch.X && sanitizedGameData.rematch.O) {
+                const newStartingPlayer = sanitizedGameData.startingPlayer === 'X' ? 'O' : 'X';
+                roomRef.update({
+                    board: Array(9).fill(null),
+                    currentPlayer: newStartingPlayer,
+                    winner: null,
+                    winningLine: [],
+                    rematch: { X: false, O: false },
+                    startingPlayer: newStartingPlayer
+                });
             }
         } else {
-            setError('Room tidak ada lagi. Kembali ke menu.');
-            localStorage.removeItem('tictactoe_roomId');
-            localStorage.removeItem('tictactoe_playerSymbol');
-            setGameMode('online-menu');
-            setRoomId('');
+            setError('Room tidak ada lagi.');
+            handleBack();
         }
     });
     return () => roomRef.off('value', listener);
-  }, [roomId, db, gameMode]);
+  }, [roomId, db, onlineStep]);
 
   const handleOnlineClick = (index: number) => {
     if (!onlineGameState || onlineGameState.winner || onlineGameState.board[index] || onlineGameState.currentPlayer !== playerSymbol) {
@@ -237,9 +255,11 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const newBoard = [...onlineGameState.board];
     newBoard[index] = onlineGameState.currentPlayer;
     const result = calculateWinner(newBoard);
-    const nextPlayer = onlineGameState.currentPlayer === 'X' ? 'O' : 'X';
     
-    const updates: Partial<OnlineGameState> = { board: newBoard, currentPlayer: nextPlayer };
+    const updates: Partial<Pick<OnlineGameState, 'board' | 'currentPlayer' | 'winner' | 'winningLine'>> = {
+        board: newBoard,
+        currentPlayer: onlineGameState.currentPlayer === 'X' ? 'O' : 'X'
+    };
     if (result) {
         updates.winner = result.winner;
         updates.winningLine = result.line;
@@ -247,32 +267,26 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     db.ref(`games/${roomId}`).update(updates);
   };
 
-  const resetOnlineGame = () => {
-      if (!roomId || !db) return;
-      db.ref(`games/${roomId}`).update({
-          board: Array(9).fill(null),
-          currentPlayer: 'X',
-          winner: null,
-          winningLine: [],
-      });
-  }
+  const handleRematch = () => {
+      if (!roomId || !playerSymbol) return;
+      db.ref(`games/${roomId}/rematch/${playerSymbol}`).set(true);
+  };
 
   const handleBack = () => {
       setError('');
       if (gameMode === 'local' || gameMode === 'menu') {
           onBack();
-      } else if (gameMode === 'online-lobby' || gameMode === 'online-game') {
-          localStorage.removeItem('tictactoe_roomId');
-          localStorage.removeItem('tictactoe_playerSymbol');
-          if (playerSymbol && roomId) {
-              db.ref(`games/${roomId}/players/${playerSymbol}`).set(null).catch(console.error);
+      } else if (gameMode === 'online') {
+          if (onlineStep === 'game' || onlineStep === 'room') {
+            localStorage.removeItem('tictactoe_roomId');
+            setRoomId('');
+            setPlayerSymbol(null);
+            setOnlineGameState(null);
+            setOnlineStep('room');
+            if (onlineStep === 'room') setGameMode('menu');
+          } else if (onlineStep === 'name') {
+            setGameMode('menu');
           }
-          setGameMode('online-menu');
-          setRoomId('');
-          setPlayerSymbol(null);
-          setOnlineGameState(null);
-      } else if (gameMode === 'online-menu') {
-          setGameMode('menu');
       }
   };
   
@@ -281,13 +295,15 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         if (winner) return winner === 'Draw' ? "Hasilnya Seri!" : `Pemain ${winner} Menang!`;
         return `Giliran Pemain ${currentPlayer}`;
     }
-    if (gameMode === 'online-game' && onlineGameState) {
-        const { winner: onlineWinner, currentPlayer: onlineCurrentPlayer } = onlineGameState;
+    if (onlineStep === 'game' && onlineGameState) {
+        const { winner: onlineWinner, currentPlayer: onlineCurrentPlayer, players } = onlineGameState;
+        const opponentName = playerSymbol === 'X' ? players.O?.name : players.X?.name;
+
         if (onlineWinner) {
             if (onlineWinner === 'Draw') return "Hasilnya Seri!";
-            return onlineWinner === playerSymbol ? "Kamu Menang!" : "Kamu Kalah!";
+            return onlineWinner === playerSymbol ? "Kamu Menang!" : `${opponentName || 'Lawan'} Menang!`;
         }
-        return onlineCurrentPlayer === playerSymbol ? "Giliranmu" : "Menunggu Lawan";
+        return onlineCurrentPlayer === playerSymbol ? "Giliranmu" : `Menunggu ${opponentName || 'Lawan'}`;
     }
     return '';
   };
@@ -311,18 +327,68 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       </div>
   );
 
-  const renderContent = () => {
-    if (isLoading) {
-        return (
-            <div className="text-center">
-                <div className="spinner-border text-info" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                </div>
-                <p className="fs-4 text-light mt-3">Memeriksa sesi game...</p>
-            </div>
-        );
-    }
+  const renderOnlineContent = () => {
+      switch (onlineStep) {
+          case 'name':
+              return (
+                  <div className="text-center col-md-8 col-lg-6 mx-auto">
+                      <h2 className="display-5 fw-bold text-white mb-4">Masukkan Namamu</h2>
+                      <div className="input-group">
+                          <input ref={nameInputRef} type="text" className="form-control form-control-lg bg-secondary border-secondary text-light" placeholder="Nama Pemain" aria-label="Nama Pemain" />
+                          <button onClick={handleNameSubmit} className="btn btn-info">Lanjut</button>
+                      </div>
+                      {error && <p className="text-danger mt-2">{error}</p>}
+                  </div>
+              );
+          case 'room':
+               return (
+                  <div className="text-center col-md-8 col-lg-6 mx-auto">
+                      <h2 className="display-5 fw-bold text-white mb-3">Selamat Datang, {playerName}!</h2>
+                      <p className="fs-5 text-muted mb-4">Masukkan nama room untuk bermain.</p>
+                      <div className="input-group">
+                          <input ref={roomInputRef} type="text" className="form-control form-control-lg bg-secondary border-secondary text-light" placeholder="Nama Room" aria-label="Nama Room" />
+                          <button onClick={handleEnterRoom} disabled={isLoading} className="btn btn-info">
+                              {isLoading ? <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> : 'Masuk'}
+                          </button>
+                      </div>
+                      {error && <p className="text-danger mt-2">{error}</p>}
+                  </div>
+              );
+          case 'game':
+              if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
+              if (!onlineGameState.players.O) { // Tampilan Lobby
+                  return (
+                      <div className="text-center">
+                          <h2 className="display-5 fw-bold text-white mb-3">Room: {roomId}</h2>
+                          <p className="fs-5 text-muted">Bagikan nama room ini ke temanmu</p>
+                           <div className="my-4 d-flex justify-content-center align-items-center gap-2">
+                                <div className="spinner-border text-warning" role="status"><span className="visually-hidden">Loading...</span></div>
+                                <p className="fs-4 text-warning m-0">Menunggu pemain lain...</p>
+                            </div>
+                      </div>
+                  );
+              }
+              const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
+              const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
+              return (
+                  <div className="text-center">
+                      <div className="mb-4">
+                          <h2 className="display-5 fw-bold text-white">{onlineGameState.players.X?.name || '?'} vs {onlineGameState.players.O?.name || '?'}</h2>
+                          <p className="text-muted mb-0">Room: {roomId}</p>
+                          <p className={`mt-3 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
+                      </div>
+                      {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, handleOnlineClick, onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner)}
+                      {onlineGameState.winner && (
+                          <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-5 btn btn-primary btn-lg">
+                                Rematch ({rematchCount}/2)
+                          </button>
+                      )}
+                  </div>
+              );
+      }
+  };
 
+  const renderContent = () => {
     switch(gameMode) {
       case 'menu':
         return (
@@ -330,7 +396,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <h2 className="display-5 fw-bold text-white mb-5">Tic-Tac-Toe</h2>
             <div className="d-grid gap-3 col-sm-8 col-md-6 col-lg-4 mx-auto">
               <button onClick={() => setGameMode('local')} className="btn btn-primary btn-lg">Mabar Lokal</button>
-              <button onClick={() => setGameMode('online-menu')} className="btn btn-info btn-lg">Mabar Online</button>
+              <button onClick={() => setGameMode('online')} className="btn btn-info btn-lg">Mabar Online</button>
             </div>
           </div>
         );
@@ -345,61 +411,8 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             {winner && <button onClick={resetLocalGame} className="mt-5 btn btn-primary btn-lg">Main Lagi</button>}
           </div>
         );
-      case 'online-menu':
-        return (
-            <div className="text-center col-md-8 col-lg-6 mx-auto">
-                <h2 className="display-5 fw-bold text-white mb-5">Mabar Online</h2>
-                <div className="d-grid gap-3">
-                    <button onClick={handleCreateRoom} disabled={isLoading} className="btn btn-primary btn-lg">
-                        Buat Room Baru
-                    </button>
-                </div>
-                <div className="my-4 text-muted position-relative d-flex align-items-center justify-content-center">
-                    <hr className="w-100" />
-                    <span className="position-absolute px-3 bg-dark">ATAU</span>
-                </div>
-                <div>
-                    <label htmlFor="joinRoomInput" className="form-label">Gabung Room yang Ada</label>
-                    <div className="input-group">
-                        <input ref={joinRoomInputRef} type="text" id="joinRoomInput" className="form-control form-control-lg bg-secondary border-secondary text-light" placeholder="Masukkan ID Room" aria-label="ID Room" />
-                        <button onClick={handleJoinRoom} disabled={isLoading} className="btn btn-info">
-                            Gabung
-                        </button>
-                    </div>
-                    {error && <p className="text-danger mt-2">{error}</p>}
-                </div>
-            </div>
-        );
-      case 'online-lobby':
-        return (
-          <div className="text-center">
-            <h2 className="display-5 fw-bold text-white mb-3">Lobby</h2>
-            <p className="fs-5 text-muted">Bagikan ID Room ini ke temanmu</p>
-            <div className="my-4 d-flex justify-content-center align-items-center gap-2">
-              <p className="fs-2 fw-bold text-info p-3 border border-2 border-info rounded-3 d-inline-block m-0 user-select-all">{roomId}</p>
-              <button className="btn btn-sm btn-outline-secondary" onClick={() => navigator.clipboard.writeText(roomId)} title="Salin ID">Salin</button>
-            </div>
-            <div className="d-flex justify-content-center align-items-center gap-2">
-                <div className="spinner-border text-warning" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                </div>
-                <p className="fs-4 text-warning m-0">Menunggu pemain lain...</p>
-            </div>
-          </div>
-        );
-      case 'online-game':
-        if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p>Memuat game...</p></div>;
-        return (
-            <div className="text-center">
-                <div className="mb-5">
-                    <h2 className="display-5 fw-bold text-white">Kamu adalah Pemain {playerSymbol}</h2>
-                    <p className="text-muted mb-0">Room ID: {roomId}</p>
-                    <p className={`mt-3 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
-                </div>
-                {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, handleOnlineClick, onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner)}
-                {onlineGameState.winner && <button onClick={resetOnlineGame} className="mt-5 btn btn-primary btn-lg">Main Lagi</button>}
-            </div>
-        );
+      case 'online':
+        return renderOnlineContent();
     }
   };
 

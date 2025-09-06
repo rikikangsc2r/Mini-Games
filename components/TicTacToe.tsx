@@ -63,6 +63,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       handleOnlineBack,
       handleRematch,
       changeGameMode,
+      handleChangeNameRequest,
   } = useOnlineGame('games', createInitialOnlineState, reconstructOnlineState);
   
   // State game lokal
@@ -200,7 +201,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const renderOnlineContent = () => {
       if (onlineStep === 'name' || onlineStep === 'room') {
-        return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error }} />;
+        return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error, handleChangeNameRequest }} />;
       }
 
       if (onlineStep === 'game') {

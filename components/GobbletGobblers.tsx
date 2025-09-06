@@ -130,6 +130,7 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       handleOnlineBack,
       handleRematch,
       changeGameMode,
+      handleChangeNameRequest,
   } = useOnlineGame('gobblet-games', createInitialOnlineState, reconstructOnlineState);
 
   // --- Game Logic ---
@@ -380,7 +381,7 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const renderOnlineContent = () => {
     if (onlineStep === 'name' || onlineStep === 'room') {
-        return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error }} />;
+        return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error, handleChangeNameRequest }} />;
     }
 
     if (onlineStep === 'game') {

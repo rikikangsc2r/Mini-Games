@@ -9,6 +9,7 @@ interface OnlineGameSetupProps {
     handleEnterRoom: () => void;
     isLoading: boolean;
     error: string;
+    handleChangeNameRequest: () => void;
 }
 
 const OnlineGameSetup: React.FC<OnlineGameSetupProps> = ({
@@ -20,6 +21,7 @@ const OnlineGameSetup: React.FC<OnlineGameSetupProps> = ({
     handleEnterRoom,
     isLoading,
     error,
+    handleChangeNameRequest,
 }) => {
     if (onlineStep === 'name') {
         return (
@@ -37,7 +39,17 @@ const OnlineGameSetup: React.FC<OnlineGameSetupProps> = ({
     if (onlineStep === 'room') {
         return (
             <div className="text-center col-md-8 col-lg-6 mx-auto">
-                <h2 className="display-5 fw-bold text-white mb-3">Selamat Datang, {playerName}!</h2>
+                <h2 className="display-5 fw-bold text-white mb-3">
+                    Selamat Datang, {playerName}!
+                    <button 
+                        onClick={handleChangeNameRequest} 
+                        className="btn btn-link btn-sm text-info p-1 ms-2" 
+                        aria-label="Ganti nama"
+                        style={{ verticalAlign: 'middle' }}
+                    >
+                        (Ganti)
+                    </button>
+                </h2>
                 <p className="fs-5 text-muted mb-4">Masukkan nama room untuk bermain.</p>
                 <div className="input-group">
                     <input ref={roomInputRef} type="text" className="form-control form-control-lg bg-secondary border-secondary text-light" placeholder="Nama Room" aria-label="Nama Room" />

@@ -143,6 +143,11 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         db.ref(`${gameDbKey}/${roomId}/rematch/${playerSymbol}`).set(true);
     };
 
+    const handleChangeNameRequest = useCallback(() => {
+        playSound('back');
+        setOnlineStep('name');
+    }, [playSound]);
+
     const handleOnlineBack = useCallback(() => {
         playSound('back');
         setError('');
@@ -180,9 +185,23 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
     
     useEffect(() => {
         if (onlineStep === 'game' && onlineGameState && prevOnlineGameState) {
+            // Opponent joined
             if (!prevOnlineGameState.players.O && onlineGameState.players.O) {
                 playSound('notify');
             }
+            
+            // Opponent made a move (for non-chess games)
+            if (
+                gameDbKey !== 'chess-games' &&
+                onlineGameState.currentPlayer === playerSymbol &&
+                prevOnlineGameState.currentPlayer !== playerSymbol &&
+                !onlineGameState.winner &&
+                onlineGameState.players.X && onlineGameState.players.O
+            ) {
+                playSound('place');
+            }
+
+            // Game ended
             if (!prevOnlineGameState.winner && onlineGameState.winner) {
                 if (onlineGameState.winner === 'Draw') {
                     playSound('draw');
@@ -193,7 +212,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
                 }
             }
         }
-    }, [onlineGameState, prevOnlineGameState, onlineStep, playerSymbol, playSound]);
+    }, [onlineGameState, prevOnlineGameState, onlineStep, playerSymbol, playSound, gameDbKey]);
 
     return {
         gameMode,
@@ -211,5 +230,6 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         handleOnlineBack,
         handleRematch,
         changeGameMode,
+        handleChangeNameRequest,
     };
 };

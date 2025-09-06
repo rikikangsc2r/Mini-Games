@@ -104,6 +104,7 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         gameMode, onlineStep, playerName, roomId, playerSymbol, onlineGameState,
         isLoading, error, nameInputRef, roomInputRef,
         handleNameSubmit, handleEnterRoom, handleOnlineBack, handleRematch, changeGameMode,
+        handleChangeNameRequest,
     } = useOnlineGame('chess-games', createInitialOnlineState, reconstructOnlineState);
 
     // --- Memos and Callbacks ---
@@ -390,7 +391,7 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     const renderOnlineContent = () => {
         if (onlineStep === 'name' || onlineStep === 'room') {
-            return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error }} />;
+            return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error, handleChangeNameRequest }} />;
         }
         if (onlineStep === 'game') {
             if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;

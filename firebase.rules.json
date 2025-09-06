@@ -5,6 +5,12 @@
         ".read": "true",
         ".write": "true"
       }
+    },
+    "gobblet-games": {
+      "$roomId": {
+        ".read": "true",
+        ".write": "true"
+      }
     }
   }
 }

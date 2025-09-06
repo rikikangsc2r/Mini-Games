@@ -77,7 +77,7 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
       });
   }
   
-  const reconstructedPiles = createInitialPiles();
+  const reconstructedPiles: HomePiles = { X: [[], [], []], O: [[], [], []] };
   ['X', 'O'].forEach(p_key => {
       const player = p_key as Player;
       const playerPilesData = gameData.homePiles?.[player];
@@ -292,9 +292,11 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
     if (onlineGameState) {
       const { winner, currentPlayer, players } = onlineGameState;
-      const opponentName = playerSymbol === 'X' ? players.O?.name : players.X?.name;
-      if (winner) return winner === playerSymbol ? "Kamu Menang!" : `${opponentName || 'Lawan'} Menang!`;
-      return currentPlayer === playerSymbol ? "Giliranmu" : `Menunggu ${opponentName || 'Lawan'}`;
+      if (winner) {
+          const winnerName = players[winner as Player]?.name;
+          return winner === playerSymbol ? "Kamu Menang!" : `${winnerName || 'Lawan'} Menang!`;
+      }
+      return currentPlayer === playerSymbol ? "Giliranmu" : `Menunggu ${players[currentPlayer]?.name || 'Lawan'}`;
     }
     return '';
   };

@@ -172,13 +172,13 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
     if (onlineGameState) {
         const { winner: onlineWinner, currentPlayer: onlineCurrentPlayer, players } = onlineGameState;
-        const opponentName = playerSymbol === 'X' ? players.O?.name : players.X?.name;
-
+        
         if (onlineWinner) {
             if (onlineWinner === 'Draw') return "Hasilnya Seri!";
-            return onlineWinner === playerSymbol ? "Kamu Menang!" : `${opponentName || 'Lawan'} Menang!`;
+            const winnerName = players[onlineWinner as Player]?.name;
+            return onlineWinner === playerSymbol ? "Kamu Menang!" : `${winnerName || 'Lawan'} Menang!`;
         }
-        return onlineCurrentPlayer === playerSymbol ? "Giliranmu" : `Menunggu ${opponentName || 'Lawan'}`;
+        return onlineCurrentPlayer === playerSymbol ? "Giliranmu" : `Menunggu ${players[onlineCurrentPlayer]?.name || 'Lawan'}`;
     }
     return '';
   };

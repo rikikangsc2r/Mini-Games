@@ -5,6 +5,7 @@ import TicTacToe from './components/TicTacToe';
 import GobbletGobblers from './components/GobbletGobblers';
 import Chess from './components/Chess';
 import Header from './components/Header';
+import useSounds from './components/useSounds';
 
 const TicTacToeIcon = () => (
   <svg viewBox="0 0 100 100" style={{ width: '100%', height: 'auto', padding: '1rem', maxHeight: '150px' }}>
@@ -40,14 +41,17 @@ const ChessIcon = () => (
 
 const App: React.FC = () => {
   const [currentGame, setCurrentGame] = useState<GameID>('menu');
+  const playSound = useSounds();
 
   const selectGame = useCallback((gameId: GameID) => {
+    playSound('select');
     setCurrentGame(gameId);
-  }, []);
+  }, [playSound]);
   
   const backToMenu = useCallback(() => {
+    playSound('back');
     setCurrentGame('menu');
-  }, []);
+  }, [playSound]);
 
   const renderGame = () => {
     switch (currentGame) {

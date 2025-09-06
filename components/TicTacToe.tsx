@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Player } from '../types';
 import BackButton from './BackButton';
+import useSounds from './useSounds';
 
 // Objek firebase global dari skrip di index.html
 declare const firebase: any;
@@ -50,14 +51,29 @@ interface OnlineGameState {
         X: OnlinePlayer | null;
         O: OnlinePlayer | null;
     };
-    createdAt: number;
+    // FIX: Changed from `number` to `any` to support `firebase.database.ServerValue.TIMESTAMP` which is an object.
+    createdAt: any;
     rematch: { X: boolean; O: boolean };
     startingPlayer: Player;
 }
 
+// Helper hook to get the previous value of a state or prop
+function usePrevious<T>(value: T): T | undefined {
+    const ref = useRef<T>();
+    useEffect(() => {
+        ref.current = value;
+    }, [value]);
+    return ref.current;
+}
+
+// FIX: Initialize Firebase database instance outside the component
+// This ensures a single, stable instance is used throughout the component lifecycle.
+const db = firebase.database();
+
 const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [gameMode, setGameMode] = useState<GameMode>('menu');
   const [onlineStep, setOnlineStep] = useState<OnlineStep>('name');
+  const playSound = useSounds();
   
   // State game online
   const [playerName, setPlayerName] = useState('');
@@ -70,14 +86,13 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const roomInputRef = useRef<HTMLInputElement>(null);
   const deviceId = useRef<string>(getDeviceId());
+  const prevOnlineGameState = usePrevious(onlineGameState);
 
   // State game lokal
   const [board, setBoard] = useState<(Player | null)[]>(Array(9).fill(null));
   const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
   const [winner, setWinner] = useState<Player | 'Draw' | null>(null);
   const [winningLine, setWinningLine] = useState<number[]>([]);
-
-  const db = firebase.database();
 
   useEffect(() => {
     const storedName = localStorage.getItem('playerName');
@@ -110,14 +125,19 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     if (gameMode === 'local') {
       const result = calculateWinner(board);
       if (result) {
+        if (!winner) { // Play sound only on transition
+            if (result.winner === 'Draw') playSound('draw');
+            else playSound('win');
+        }
         setWinner(result.winner);
         setWinningLine(result.line);
       }
     }
-  }, [board, gameMode, calculateWinner]);
+  }, [board, gameMode, calculateWinner, playSound, winner]);
 
   const handleLocalClick = (index: number) => {
     if (winner || board[index]) return;
+    playSound('place');
     const newBoard = [...board];
     newBoard[index] = currentPlayer;
     setBoard(newBoard);
@@ -125,6 +145,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   const resetLocalGame = () => {
+    playSound('select');
     setBoard(Array(9).fill(null));
     setCurrentPlayer('X');
     setWinner(null);
@@ -135,6 +156,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const handleNameSubmit = () => {
       const name = nameInputRef.current?.value.trim();
       if (name) {
+          playSound('select');
           setPlayerName(name);
           localStorage.setItem('playerName', name);
           setOnlineStep('room');
@@ -149,6 +171,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           setError('Nama room tidak boleh kosong.');
           return;
       }
+      playSound('select');
       setIsLoading(true);
       setError('');
       
@@ -200,11 +223,30 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       } finally {
           setIsLoading(false);
       }
-  }, [db, playerName]);
+  }, [playerName, playSound]);
 
 
+  const handleBack = () => {
+      setError('');
+      if (gameMode === 'local' || gameMode === 'menu') {
+          onBack();
+      } else if (gameMode === 'online') {
+          playSound('back');
+          if (onlineStep === 'game' || onlineStep === 'room') {
+            localStorage.removeItem('tictactoe_roomId');
+            setRoomId('');
+            setPlayerSymbol(null);
+            setOnlineGameState(null);
+            setOnlineStep('room');
+            if (onlineStep === 'room') setGameMode('menu');
+          } else if (onlineStep === 'name') {
+            setGameMode('menu');
+          }
+      }
+  };
+  
   useEffect(() => {
-    if (onlineStep !== 'game' || !roomId || !db) return;
+    if (onlineStep !== 'game' || !roomId) return;
     
     const roomRef = db.ref(`games/${roomId}`);
     const listener = roomRef.on('value', (snapshot: any) => {
@@ -246,12 +288,33 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }
     });
     return () => roomRef.off('value', listener);
-  }, [roomId, db, onlineStep]);
+  }, [roomId, onlineStep]);
+  
+  // Effect for online game sounds based on state changes
+  useEffect(() => {
+    if (onlineStep === 'game' && onlineGameState && prevOnlineGameState) {
+      // Opponent joined
+      if (!prevOnlineGameState.players.O && onlineGameState.players.O) {
+        playSound('notify');
+      }
+      // Game ended
+      if (!prevOnlineGameState.winner && onlineGameState.winner) {
+        if (onlineGameState.winner === 'Draw') {
+          playSound('draw');
+        } else if (onlineGameState.winner === playerSymbol) {
+          playSound('win');
+        } else {
+          playSound('draw'); // Use draw sound for loss
+        }
+      }
+    }
+  }, [onlineGameState, prevOnlineGameState, onlineStep, playerSymbol, playSound]);
 
   const handleOnlineClick = (index: number) => {
     if (!onlineGameState || onlineGameState.winner || onlineGameState.board[index] || onlineGameState.currentPlayer !== playerSymbol) {
         return;
     }
+    playSound('place');
     const newBoard = [...onlineGameState.board];
     newBoard[index] = onlineGameState.currentPlayer;
     const result = calculateWinner(newBoard);
@@ -269,27 +332,10 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const handleRematch = () => {
       if (!roomId || !playerSymbol) return;
+      playSound('select');
       db.ref(`games/${roomId}/rematch/${playerSymbol}`).set(true);
   };
 
-  const handleBack = () => {
-      setError('');
-      if (gameMode === 'local' || gameMode === 'menu') {
-          onBack();
-      } else if (gameMode === 'online') {
-          if (onlineStep === 'game' || onlineStep === 'room') {
-            localStorage.removeItem('tictactoe_roomId');
-            setRoomId('');
-            setPlayerSymbol(null);
-            setOnlineGameState(null);
-            setOnlineStep('room');
-            if (onlineStep === 'room') setGameMode('menu');
-          } else if (onlineStep === 'name') {
-            setGameMode('menu');
-          }
-      }
-  };
-  
   const getStatusMessage = () => {
     if (gameMode === 'local') {
         if (winner) return winner === 'Draw' ? "Hasilnya Seri!" : `Pemain ${winner} Menang!`;
@@ -307,6 +353,11 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
     return '';
   };
+  
+  const changeGameMode = (mode: GameMode) => {
+    playSound('select');
+    setGameMode(mode);
+  }
 
   const renderGameBoard = (
       boardState: (Player | null)[], 
@@ -395,8 +446,8 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           <div className="text-center">
             <h2 className="display-5 fw-bold text-white mb-5">Tic-Tac-Toe</h2>
             <div className="d-grid gap-3 col-sm-8 col-md-6 col-lg-4 mx-auto">
-              <button onClick={() => setGameMode('local')} className="btn btn-primary btn-lg">Mabar Lokal</button>
-              <button onClick={() => setGameMode('online')} className="btn btn-info btn-lg">Mabar Online</button>
+              <button onClick={() => changeGameMode('local')} className="btn btn-primary btn-lg">Mabar Lokal</button>
+              <button onClick={() => changeGameMode('online')} className="btn btn-info btn-lg">Mabar Online</button>
             </div>
           </div>
         );

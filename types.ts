@@ -1,0 +1,2 @@
+export type Player = 'X' | 'O';
+export type GameID = 'menu' | 'tictactoe' | 'gobblet' | 'chess';

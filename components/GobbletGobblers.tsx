@@ -337,24 +337,48 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       if (snapshot.exists()) {
         const gameData = snapshot.val();
         
-        // Reconstruct state to avoid issues with Firebase's array representation
+        // Robustly reconstruct board state from Firebase data, which may represent arrays as objects.
         const reconstructedBoard = createInitialBoard();
-        if(gameData.board) {
-            // FIX: Corrected the type of 'row' to match the nested array structure of the board state.
-            // A 'row' is an array of cells (Piece[]), not an array of single pieces (Piece).
-            gameData.board.forEach((row: (Piece[] | null)[] | null, r: number) => {
-                if(row) row.forEach((cell: Piece[] | null, c: number) => {
-                    if(cell) reconstructedBoard[r][c] = Object.values(cell);
-                });
+        const boardData = gameData.board;
+        if (boardData && typeof boardData === 'object') {
+            Object.keys(boardData).forEach(r_key => {
+                const r = parseInt(r_key, 10);
+                if (isNaN(r) || r < 0 || r >= 3) return;
+                const rowData = boardData[r_key];
+                if (rowData && typeof rowData === 'object') {
+                    Object.keys(rowData).forEach(c_key => {
+                        const c = parseInt(c_key, 10);
+                        if (isNaN(c) || c < 0 || c >= 3) return;
+                        const cellData = rowData[c_key];
+                        // A cell is a stack of pieces, which can be an array or an object from Firebase
+                        if (cellData && typeof cellData === 'object') {
+                            reconstructedBoard[r][c] = Object.values(cellData);
+                        } else if (Array.isArray(cellData)) {
+                            reconstructedBoard[r][c] = cellData;
+                        }
+                    });
+                }
             });
         }
         
+        // Robustly reconstruct home piles state
         const reconstructedPiles = createInitialPiles();
-        ['X', 'O'].forEach(p => {
-            const player = p as Player;
-            if(gameData.homePiles?.[player]) {
-                gameData.homePiles[player].forEach((pile: Piece[] | null, pileIndex: number) => {
-                    reconstructedPiles[player][pileIndex] = pile ? Object.values(pile) : [];
+        ['X', 'O'].forEach(p_key => {
+            const player = p_key as Player;
+            const playerPilesData = gameData.homePiles?.[player];
+            if (playerPilesData && typeof playerPilesData === 'object') {
+                Object.keys(playerPilesData).forEach(pileIndex_key => {
+                    const pileIndex = parseInt(pileIndex_key, 10);
+                    if (isNaN(pileIndex) || pileIndex < 0 || pileIndex >= 3) return;
+                    const pileData = playerPilesData[pileIndex_key];
+                    // A pile is a stack of pieces, which can be an array or an object from Firebase
+                    if (pileData && typeof pileData === 'object') {
+                        reconstructedPiles[player][pileIndex] = Object.values(pileData);
+                    } else if (Array.isArray(pileData)) {
+                        reconstructedPiles[player][pileIndex] = pileData;
+                    } else {
+                        reconstructedPiles[player][pileIndex] = [];
+                    }
                 });
             }
         });

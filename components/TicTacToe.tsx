@@ -5,6 +5,16 @@ import BackButton from './BackButton';
 // Objek firebase global dari skrip di index.html
 declare const firebase: any;
 
+// Helper untuk mendapatkan atau membuat ID perangkat
+const getDeviceId = (): string => {
+    let id = localStorage.getItem('deviceId');
+    if (!id) {
+        id = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('deviceId', id);
+    }
+    return id;
+};
+
 const Square: React.FC<{ value: Player | null; onClick: () => void; isWinning: boolean; disabled?: boolean }> = ({ value, onClick, isWinning, disabled }) => (
   <button
     className={`btn d-flex align-items-center justify-content-center fw-bold rounded-3 transition-all duration-200
@@ -30,7 +40,7 @@ interface OnlineGameState {
     currentPlayer: Player;
     winner: Player | 'Draw' | null;
     winningLine: number[];
-    players: { X: boolean; O: boolean; };
+    players: { X: string | null; O: string | null; };
 }
 
 const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -40,9 +50,10 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [roomId, setRoomId] = useState('');
   const [playerSymbol, setPlayerSymbol] = useState<Player | null>(null);
   const [onlineGameState, setOnlineGameState] = useState<OnlineGameState | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const joinRoomInputRef = useRef<HTMLInputElement>(null);
+  const deviceId = useRef<string>(getDeviceId());
 
   // State game lokal
   const [board, setBoard] = useState<(Player | null)[]>(Array(9).fill(null));
@@ -51,6 +62,40 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [winningLine, setWinningLine] = useState<number[]>([]);
 
   const db = firebase.database();
+
+  // Logika untuk bergabung kembali saat komponen dimuat
+  useEffect(() => {
+    const savedRoomId = localStorage.getItem('tictactoe_roomId');
+    const savedPlayerSymbol = localStorage.getItem('tictactoe_playerSymbol') as Player | null;
+
+    if (savedRoomId && savedPlayerSymbol) {
+      const roomRef = db.ref(`games/${savedRoomId}`);
+      roomRef.get().then((snapshot: any) => {
+        if (snapshot.exists()) {
+          const gameData: OnlineGameState = snapshot.val();
+          if (gameData.players && gameData.players[savedPlayerSymbol] === deviceId.current) {
+            setRoomId(savedRoomId);
+            setPlayerSymbol(savedPlayerSymbol);
+            if (savedPlayerSymbol === 'X' && !gameData.players.O) {
+              setGameMode('online-lobby');
+            } else {
+              setGameMode('online-game');
+            }
+          } else {
+            localStorage.removeItem('tictactoe_roomId');
+            localStorage.removeItem('tictactoe_playerSymbol');
+          }
+        } else {
+            localStorage.removeItem('tictactoe_roomId');
+            localStorage.removeItem('tictactoe_playerSymbol');
+        }
+      }).finally(() => {
+        setIsLoading(false);
+      });
+    } else {
+        setIsLoading(false);
+    }
+  }, [db]);
 
   const calculateWinner = useCallback((squares: (Player | null)[]): { winner: Player | 'Draw', line: number[] } | null => {
     const lines = [
@@ -106,10 +151,12 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         currentPlayer: 'X',
         winner: null,
         winningLine: [],
-        players: { X: true, O: false },
+        players: { X: deviceId.current, O: null },
     };
     try {
         await db.ref(`games/${newRoomId}`).set(newGame);
+        localStorage.setItem('tictactoe_roomId', newRoomId);
+        localStorage.setItem('tictactoe_playerSymbol', 'X');
         setRoomId(newRoomId);
         setPlayerSymbol('X');
         setGameMode('online-lobby');
@@ -135,12 +182,15 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           const snapshot = await roomRef.get();
           if (snapshot.exists()) {
               const gameData: OnlineGameState = snapshot.val();
-              if (gameData.players.O) {
+              if (gameData.players.O && gameData.players.O !== deviceId.current) {
                   setError('Room sudah penuh.');
               } else {
-                  await roomRef.child('players/O').set(true);
+                  await roomRef.child('players/O').set(deviceId.current);
+                  localStorage.setItem('tictactoe_roomId', joinRoomId);
+                  localStorage.setItem('tictactoe_playerSymbol', 'O');
                   setRoomId(joinRoomId);
                   setPlayerSymbol('O');
+                  setGameMode('online-game');
               }
           } else {
               setError('Room tidak ditemukan.');
@@ -159,18 +209,20 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const listener = roomRef.on('value', (snapshot: any) => {
         if (snapshot.exists()) {
             const gameData = snapshot.val();
-            // Sanitize Firebase data: ensure board and winningLine are always arrays to prevent runtime errors.
             const sanitizedGameData: OnlineGameState = {
                 ...gameData,
                 board: gameData.board || Array(9).fill(null),
                 winningLine: gameData.winningLine || [],
+                players: gameData.players || { X: null, O: null },
             };
             setOnlineGameState(sanitizedGameData);
-            if (gameMode === 'online-lobby' && gameData.players?.O) {
+            if (gameMode === 'online-lobby' && sanitizedGameData.players.O) {
                 setGameMode('online-game');
             }
         } else {
             setError('Room tidak ada lagi. Kembali ke menu.');
+            localStorage.removeItem('tictactoe_roomId');
+            localStorage.removeItem('tictactoe_playerSymbol');
             setGameMode('online-menu');
             setRoomId('');
         }
@@ -210,6 +262,11 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       if (gameMode === 'local' || gameMode === 'menu') {
           onBack();
       } else if (gameMode === 'online-lobby' || gameMode === 'online-game') {
+          localStorage.removeItem('tictactoe_roomId');
+          localStorage.removeItem('tictactoe_playerSymbol');
+          if (playerSymbol && roomId) {
+              db.ref(`games/${roomId}/players/${playerSymbol}`).set(null).catch(console.error);
+          }
           setGameMode('online-menu');
           setRoomId('');
           setPlayerSymbol(null);
@@ -255,6 +312,17 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   );
 
   const renderContent = () => {
+    if (isLoading) {
+        return (
+            <div className="text-center">
+                <div className="spinner-border text-info" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                </div>
+                <p className="fs-4 text-light mt-3">Memeriksa sesi game...</p>
+            </div>
+        );
+    }
+
     switch(gameMode) {
       case 'menu':
         return (
@@ -283,7 +351,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <h2 className="display-5 fw-bold text-white mb-5">Mabar Online</h2>
                 <div className="d-grid gap-3">
                     <button onClick={handleCreateRoom} disabled={isLoading} className="btn btn-primary btn-lg">
-                        {isLoading ? 'Membuat...' : 'Buat Room Baru'}
+                        Buat Room Baru
                     </button>
                 </div>
                 <div className="my-4 text-muted position-relative d-flex align-items-center justify-content-center">
@@ -295,7 +363,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="input-group">
                         <input ref={joinRoomInputRef} type="text" id="joinRoomInput" className="form-control form-control-lg bg-secondary border-secondary text-light" placeholder="Masukkan ID Room" aria-label="ID Room" />
                         <button onClick={handleJoinRoom} disabled={isLoading} className="btn btn-info">
-                            {isLoading ? '...' : 'Gabung'}
+                            Gabung
                         </button>
                     </div>
                     {error && <p className="text-danger mt-2">{error}</p>}

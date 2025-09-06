@@ -214,6 +214,7 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const gs = isOnline ? onlineGameState : { winner, currentPlayer, board, homePiles };
 
     if (!gs || gs.winner) return;
+    if (isOnline && gs.currentPlayer !== playerSymbol) return;
 
     if (selection) { // --- Placement click ---
       const targetCell = gs.board[r][c];

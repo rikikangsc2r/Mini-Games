@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Player } from '../types';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
+import GameBoard from './GameBoard';
 
 // Objek firebase global dari skrip di index.html
 declare const firebase: any;
@@ -15,24 +16,6 @@ const getDeviceId = (): string => {
     }
     return id;
 };
-
-const Square: React.FC<{ value: Player | null; onClick: () => void; isWinning: boolean; disabled?: boolean }> = ({ value, onClick, isWinning, disabled }) => (
-  <button
-    className={`btn d-flex align-items-center justify-content-center fw-bold rounded-3 transition-all duration-200
-      ${isWinning ? 'btn-success text-white scale-110' : 'btn-dark'}
-      ${value === 'X' ? 'text-info' : 'text-warning'}`}
-    onClick={onClick}
-    disabled={disabled}
-    aria-label={`Kotak ${value ? `dengan nilai ${value}` : 'kosong'}`}
-    style={{
-        width: 'clamp(70px, 20vw, 100px)',
-        height: 'clamp(70px, 20vw, 100px)',
-        fontSize: 'clamp(2rem, 10vw, 3.5rem)'
-    }}
-  >
-    {value}
-  </button>
-);
 
 type GameMode = 'menu' | 'local' | 'online';
 type OnlineStep = 'name' | 'room' | 'game';
@@ -59,7 +42,8 @@ interface OnlineGameState {
 
 // Helper hook to get the previous value of a state or prop
 function usePrevious<T>(value: T): T | undefined {
-    const ref = useRef<T>();
+    // FIX: `useRef` requires an initial value. Provided `undefined` and updated the type.
+    const ref = useRef<T | undefined>(undefined);
     useEffect(() => {
         ref.current = value;
     }, [value]);
@@ -288,7 +272,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }
     });
     return () => roomRef.off('value', listener);
-  }, [roomId, onlineStep]);
+  }, [roomId, onlineStep, handleBack]);
   
   // Effect for online game sounds based on state changes
   useEffect(() => {
@@ -365,17 +349,13 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       handleClick: (index: number) => void,
       isGameActive: boolean
   ) => (
-      <div className="p-3 rounded-3 shadow-lg" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', backgroundColor: '#000' }}>
-        {boardState.map((value, index) => (
-          <Square 
-            key={index} 
-            value={value} 
-            onClick={() => handleClick(index)} 
-            isWinning={winningLineState.includes(index)}
-            disabled={!isGameActive}
-          />
-        ))}
-      </div>
+      <GameBoard
+        size={3}
+        boardState={boardState}
+        winningLine={winningLineState}
+        onCellClick={handleClick}
+        disabled={!isGameActive}
+      />
   );
 
   const renderOnlineContent = () => {

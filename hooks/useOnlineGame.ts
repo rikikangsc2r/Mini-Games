@@ -188,21 +188,21 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
     const handleOnlineBack = useCallback(() => {
         playSound('back');
         setError('');
-        if (onlineStep === 'game' || onlineStep === 'room') {
+        if (onlineStep === 'game') {
+            // From an active game, go back to the room selection screen.
             setRoomId('');
             setPlayerSymbol(null);
             setOnlineGameState(null);
-            if (playerProfile) {
-                setOnlineStep('room');
-                setGameMode('online');
-            } else {
-                setOnlineStep('profile');
-                setGameMode('menu');
-            }
-        } else if (onlineStep === 'profile') {
+            setOnlineStep('room');
+        } else if (onlineStep === 'room' || onlineStep === 'profile') {
+            // From room selection or profile creation, go back to the game's mode selection screen.
             setGameMode('menu');
+            // Reset online state in case the user goes back into online mode.
+            setRoomId('');
+            setPlayerSymbol(null);
+            setOnlineGameState(null);
         }
-    }, [onlineStep, playSound, playerProfile]);
+    }, [onlineStep, playSound]);
 
     const firebaseListenerCallback = useCallback((snapshot: any) => {
         if (snapshot.exists()) {

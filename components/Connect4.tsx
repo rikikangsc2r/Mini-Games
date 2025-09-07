@@ -76,7 +76,7 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
     };
 };
 
-const Connect4: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const Connect4: React.FC = () => {
     const playSound = useSounds();
     const {
         gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
@@ -281,7 +281,7 @@ const Connect4: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     return (
         <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-            <BackButton onClick={gameMode === 'menu' ? onBack : handleOnlineBack} />
+            <BackButton />
             <div className="text-center mb-4">
               {gameMode !== 'menu' && (
                  <div className="d-flex justify-content-center align-items-center gap-3">

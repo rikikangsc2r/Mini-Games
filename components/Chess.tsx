@@ -112,7 +112,7 @@ const SquareComponent: React.FC<SquareProps> = React.memo(({
 });
 
 
-const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const Chess: React.FC = () => {
     // --- State ---
     const [game, setGame] = useState(() => new ChessJS());
     const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
@@ -462,7 +462,7 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     return (
         <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-            <BackButton onClick={gameMode === 'menu' ? onBack : handleOnlineBack} />
+            <BackButton />
             
             {gameMode !== 'menu' && (
                 <div className="text-center mb-4">

@@ -8,17 +8,20 @@ interface RulesModalProps {
 }
 
 const RulesModal: React.FC<RulesModalProps> = ({ title, show, onClose, children }) => {
+  // Effect to add class to body to prevent scrolling when modal is open
+  React.useEffect(() => {
+    if (show) {
+      document.body.style.overflow = 'hidden';
+      // Cleanup function to restore scrolling when modal is closed or component unmounts
+      return () => {
+        document.body.style.overflow = 'auto';
+      };
+    }
+  }, [show]); // FIX: Added `show` to the dependency array
+
   if (!show) {
     return null;
   }
-
-  // Effect to add class to body to prevent scrolling when modal is open
-  React.useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, []);
 
   return (
     <>

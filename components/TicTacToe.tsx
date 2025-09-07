@@ -59,7 +59,7 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
     };
 };
 
-const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const TicTacToe: React.FC = () => {
   const playSound = useSounds();
   const {
       gameMode,
@@ -154,14 +154,6 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
     db.ref(`games/${roomId}`).update(updates);
   };
-  
-  const handleBack = () => {
-    if (gameMode === 'online') {
-      handleOnlineBack();
-    } else {
-      onBack();
-    }
-  }
 
   const getStatusMessage = () => {
     if (gameMode === 'local') {
@@ -247,7 +239,7 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-      <BackButton onClick={gameMode === 'menu' ? onBack : handleBack} />
+      {gameMode === 'menu' ? <BackButton /> : <BackButton />}
       
       {gameMode !== 'menu' && (
         <div className="text-center mb-4">

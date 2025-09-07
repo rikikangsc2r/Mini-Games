@@ -115,7 +115,7 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
   };
 };
 
-const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const GobbletGobblers: React.FC = () => {
   // --- State ---
   const [selection, setSelection] = useState<Selection | null>(null);
   const playSound = useSounds();
@@ -276,14 +276,6 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
-  const handleBack = () => {
-    if (gameMode === 'online') {
-      handleOnlineBack();
-    } else {
-      onBack();
-    }
-  }
-
   // --- Render Functions ---
   const getStatusMessage = () => {
     if (gameMode === 'local') {
@@ -431,7 +423,7 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-      <BackButton onClick={gameMode === 'menu' ? onBack : handleBack} />
+      <BackButton />
        <div className="text-center mb-4">
          {gameMode !== 'menu' && (
             <div className="d-flex justify-content-center align-items-center gap-3">

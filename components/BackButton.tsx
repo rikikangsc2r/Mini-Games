@@ -1,17 +1,13 @@
 import React from 'react';
 
-interface BackButtonProps {
-    onClick: () => void;
-}
-
-const BackButton: React.FC<BackButtonProps> = ({ onClick }) => (
-    <button
-        onClick={onClick}
+const BackButton: React.FC = () => (
+    <a
+        href="#"
         className="btn btn-outline-info position-absolute top-0 start-0 m-3 z-1"
         aria-label="Kembali ke Menu"
     >
         &larr; Kembali ke Menu
-    </button>
+    </a>
 );
 
 export default BackButton;

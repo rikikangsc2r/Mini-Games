@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
-import { useOnlineGame, BaseOnlineGameState } from '../hooks/useOnlineGame';
+import { useOnlineGame, BaseOnlineGameState, OnlinePlayer } from '../hooks/useOnlineGame';
 import OnlineGameSetup from './OnlineGameSetup';
 import type { Player } from '../types';
+import RulesModal from './RulesModal';
+import PlayerDisplay from './PlayerDisplay';
+import GameLobby from './GameLobby';
+import GameModeSelector from './GameModeSelector';
 
 // --- Global Declarations & Helpers ---
 declare const firebase: any;
@@ -20,18 +24,27 @@ interface Move { from: string; to: string; promotion?: PieceType }
 interface OnlineChessGameState extends BaseOnlineGameState {
     fen: string;
     lastMove: { from: string, to: string } | null;
+    players: {
+        X: OnlinePlayer | null;
+        O: OnlinePlayer | null;
+    };
 }
 
 // --- Helper Functions ---
-const createInitialOnlineState = (playerName: string, deviceId: string): OnlineChessGameState => ({
+const createInitialOnlineState = (playerName: string, deviceId: string, avatarUrl: string): OnlineChessGameState => ({
     fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
     lastMove: null,
     currentPlayer: 'X', // 'X' is always white
     winner: null,
-    players: { X: { deviceId, name: playerName }, O: null },
+    players: { X: { deviceId, name: playerName, avatarUrl }, O: null },
     createdAt: firebase.database.ServerValue.TIMESTAMP,
     rematch: { X: false, O: false },
     startingPlayer: 'X',
+});
+
+const getRematchState = (): Partial<OnlineChessGameState> => ({
+    fen: new ChessJS().fen(),
+    lastMove: null,
 });
 
 const reconstructOnlineState = (gameData: any): OnlineChessGameState => ({
@@ -107,14 +120,15 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
     const [capturedPieces, setCapturedPieces] = useState<Record<PieceColor, Piece[]>>({ w: [], b: [] });
     const playSound = useSounds();
+    const [showRules, setShowRules] = useState(false);
     
     // --- Online Hook ---
     const {
-        gameMode, onlineStep, playerName, roomId, playerSymbol, onlineGameState,
-        isLoading, error, nameInputRef, roomInputRef,
-        handleNameSubmit, handleEnterRoom, handleOnlineBack, handleRematch, changeGameMode,
-        handleChangeNameRequest,
-    } = useOnlineGame('chess-games', createInitialOnlineState, reconstructOnlineState);
+        gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
+        isLoading, error, roomInputRef,
+        handleProfileSubmit, handleEnterRoom, handleOnlineBack, handleRematch, changeGameMode,
+        handleChangeProfileRequest,
+    } = useOnlineGame('chess-games', createInitialOnlineState, reconstructOnlineState, getRematchState);
     
     const prevOnlineGameState = usePrevious(onlineGameState);
 
@@ -130,57 +144,43 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         return kingPos?.square;
     }, [game, board]);
 
-    const { isWhite, myColor, isFlipped, myTurn } = useMemo(() => {
+    const { myColor, isFlipped, myTurn } = useMemo(() => {
         const isOnline = gameMode === 'online';
         if (!isOnline || !onlineGameState || !playerSymbol) {
-            // Local game or initial state
-            return { isWhite: game.turn() === 'w', myColor: game.turn(), isFlipped: false, myTurn: !game.game_over() };
+            return { myColor: game.turn(), isFlipped: false, myTurn: !game.game_over() };
         }
 
-        const whitePlayerSymbol = onlineGameState.startingPlayer; // 'X' or 'O'
+        const whitePlayerSymbol = onlineGameState.startingPlayer;
         const isWhiteForMe = playerSymbol === whitePlayerSymbol;
         const myColorForThisGame = isWhiteForMe ? 'w' : 'b';
         const boardIsFlipped = !isWhiteForMe;
-
-        const currentTurnColor = game.turn(); // 'w' or 'b'
+        const currentTurnColor = game.turn();
         const isMyTurn = (currentTurnColor === myColorForThisGame) && !game.game_over() && !!onlineGameState.players.O;
 
-        return { isWhite: isWhiteForMe, myColor: myColorForThisGame, isFlipped: boardIsFlipped, myTurn: isMyTurn };
+        return { myColor: myColorForThisGame, isFlipped: boardIsFlipped, myTurn: isMyTurn };
     }, [gameMode, onlineGameState, playerSymbol, game]);
     
     // Sync game state from Firebase and play sounds for opponent's moves
     useEffect(() => {
         if (gameMode !== 'online' || !onlineGameState) return;
 
-        // On initial load, just sync the FEN without playing a sound
         if (!prevOnlineGameState) {
             setGame(new ChessJS(onlineGameState.fen));
             return;
         }
 
-        // When FEN changes, it might be a move. Update board and maybe play a sound.
         if (onlineGameState.fen !== prevOnlineGameState.fen) {
             const newGame = new ChessJS(onlineGameState.fen);
             setGame(newGame);
 
-            // Play sound only for the opponent's move, not our own.
-            // A move just happened, so if the new turn is our color, it means the opponent moved.
             const isOpponentMove = newGame.turn() === myColor;
 
             if (isOpponentMove && onlineGameState.lastMove) {
                 const oldGame = new ChessJS(prevOnlineGameState.fen);
                 const wasCapture = !!oldGame.get(onlineGameState.lastMove.to);
                 
-                if (wasCapture) {
-                    playSound('back'); // Capture sound
-                } else {
-                    playSound('place'); // Simple move sound
-                }
-
-                // Play a notification sound if the opponent's move puts us in check.
-                if (newGame.in_check()) {
-                    playSound('notify');
-                }
+                if (wasCapture) playSound('back'); else playSound('place');
+                if (newGame.in_check()) playSound('notify');
             }
         }
     }, [gameMode, onlineGameState, prevOnlineGameState, myColor, playSound]);
@@ -210,26 +210,6 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         setCapturedPieces(captured);
     }, [game]);
     
-     useEffect(() => {
-        if (gameMode === 'online' && onlineGameState?.rematch.X && onlineGameState?.rematch.O) {
-            const roomRef = db.ref(`chess-games/${roomId}`);
-            const newGame = new ChessJS();
-            // In chess, 'X' is just a player label. Who is White is determined by 'startingPlayer'.
-            // For the next game, the other player starts, so we flip 'startingPlayer'.
-            // The 'currentPlayer' is reset to whoever is now designated as White.
-            const newStartingPlayer = onlineGameState.startingPlayer === 'X' ? 'O' : 'X';
-            roomRef.update({
-                fen: newGame.fen(),
-                lastMove: null,
-                currentPlayer: newStartingPlayer,
-                winner: null,
-                rematch: { X: false, O: false },
-                startingPlayer: newStartingPlayer,
-            });
-        }
-    }, [onlineGameState, gameMode, roomId]);
-
-
     const makeMove = useCallback((move: Move) => {
         const newGame = new ChessJS(game.fen());
         const result = newGame.move(move);
@@ -423,50 +403,42 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     );
 
     const renderOnlineContent = () => {
-        if (onlineStep === 'name' || onlineStep === 'room') {
-            return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error, handleChangeNameRequest }} />;
+        if (onlineStep !== 'game') {
+            return <OnlineGameSetup {...{ onlineStep, playerProfile, roomInputRef, handleProfileSubmit, handleEnterRoom, isLoading, error, handleChangeProfileRequest }} />;
         }
-        if (onlineStep === 'game') {
-            if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
-            if (!onlineGameState.players.O) {
-                return <div className="text-center"><h2 className="display-5 fw-bold text-white mb-3">Room: {roomId}</h2><p className="fs-5 text-muted">Bagikan nama room ini ke temanmu</p><div className="my-4 d-flex justify-content-center align-items-center gap-2"><div className="spinner-border text-warning" role="status"></div><p className="fs-4 text-warning m-0">Menunggu pemain lain...</p></div></div>;
-            }
-            
-            const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
-            const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
+        if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
+        if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
+        
+        const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
+        const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
 
-            const PlayerInfo: React.FC<{symbol: Player, capturedColor: PieceColor}> = ({symbol, capturedColor}) => (
-               <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center">
-                    <p className="m-0 fw-bold">{onlineGameState.players[symbol]?.name || '?'}</p>
-                    <CapturedPiecesDisplay pieces={capturedPieces[capturedColor]} />
-               </div>
-            );
+        const PlayerInfoBar: React.FC<{playerData: OnlinePlayer | null, capturedColor: PieceColor}> = ({playerData, capturedColor}) => (
+           <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center">
+                <PlayerDisplay player={playerData} />
+                <CapturedPiecesDisplay pieces={capturedPieces[capturedColor]} />
+           </div>
+        );
 
-            const opponentSymbol = playerSymbol === 'X' ? 'O' : 'X';
-            
-            // Player at the top is the opponent. Display pieces they captured (i.e., my pieces).
-            const topPlayerCapturedColor = myColor;
-            // Player at the bottom is me. Display pieces I captured (i.e., opponent's pieces).
-            const bottomPlayerCapturedColor = myColor === 'w' ? 'b' : 'w';
+        const opponentSymbol = playerSymbol === 'X' ? 'O' : 'X';
+        const topPlayerCapturedColor = myColor;
+        const bottomPlayerCapturedColor = myColor === 'w' ? 'b' : 'w';
 
-            return (
-                <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '540px'}}>
-                  {promotionMove && <PromotionChoice onPromote={handlePromotion} color={game.get(promotionMove.from)!.color} />}
-                  <PlayerInfo symbol={opponentSymbol} capturedColor={topPlayerCapturedColor} />
-                  {renderBoard()}
-                  <PlayerInfo symbol={playerSymbol!} capturedColor={bottomPlayerCapturedColor} />
-                  <p className={`mt-2 fs-5 fw-semibold ${game.game_over() || onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
-                  {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
-                </div>
-            );
-        }
-        return null;
+        return (
+            <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '540px'}}>
+              {promotionMove && <PromotionChoice onPromote={handlePromotion} color={game.get(promotionMove.from)!.color} />}
+              <PlayerInfoBar playerData={onlineGameState.players[opponentSymbol]} capturedColor={topPlayerCapturedColor} />
+              {renderBoard()}
+              <PlayerInfoBar playerData={onlineGameState.players[playerSymbol!]} capturedColor={bottomPlayerCapturedColor} />
+              <p className={`mt-2 fs-5 fw-semibold ${game.game_over() || onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
+              {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
+            </div>
+        );
     };
     
     const renderContent = () => {
         switch (gameMode) {
             case 'menu':
-                return <div className="text-center"><h2 className="display-5 fw-bold text-white mb-5">Catur</h2><div className="d-grid gap-3 col-sm-8 col-md-6 col-lg-4 mx-auto"><button onClick={() => changeGameMode('local')} className="btn btn-primary btn-lg">Mabar Lokal</button><button onClick={() => changeGameMode('online')} className="btn btn-info btn-lg">Mabar Online</button></div></div>;
+                return <GameModeSelector title="Catur" changeGameMode={changeGameMode} />;
             case 'local':
                 return (
                     <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '540px'}}>
@@ -490,8 +462,37 @@ const Chess: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     return (
         <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-            <BackButton onClick={gameMode === 'menu' ? onBack : () => gameMode === 'online' ? handleOnlineBack() : onBack()} />
+            <BackButton onClick={gameMode === 'menu' ? onBack : handleOnlineBack} />
+            
+            {gameMode !== 'menu' && (
+                <div className="text-center mb-4">
+                    <div className="d-flex justify-content-center align-items-center gap-3">
+                        <h2 className="display-5 fw-bold text-white mb-0">Catur</h2>
+                        <button onClick={() => setShowRules(true)} className="btn btn-sm btn-outline-secondary" aria-label="Tampilkan Aturan">Aturan</button>
+                    </div>
+                </div>
+            )}
+
             {renderContent()}
+
+            <RulesModal title="Aturan Dasar Catur" show={showRules} onClose={() => setShowRules(false)}>
+                <p>Tujuan utama catur adalah untuk melakukan sekakmat (checkmate) terhadap raja lawan.</p>
+                <ul className="list-unstyled ps-3">
+                    <li><strong>- Sekakmat:</strong> Situasi di mana raja lawan sedang diserang (dalam keadaan 'sekak') dan tidak bisa melarikan diri dari serangan tersebut.</li>
+                    <li><strong>- Setiap bidak memiliki cara bergerak yang unik:</strong>
+                        <ul className="list-unstyled ps-4">
+                            <li><strong>Raja (King):</strong> Bergerak satu kotak ke segala arah.</li>
+                            <li><strong>Ratu (Queen):</strong> Bergerak lurus ke segala arah (horizontal, vertikal, diagonal) dengan jarak tak terbatas.</li>
+                            <li><strong>Benteng (Rook):</strong> Bergerak lurus secara horizontal atau vertikal dengan jarak tak terbatas.</li>
+                            <li><strong>Gajah (Bishop):</strong> Bergerak lurus secara diagonal dengan jarak tak terbatas.</li>
+                            <li><strong>Kuda (Knight):</strong> Bergerak dalam bentuk "L" (dua kotak lurus, lalu satu kotak ke samping). Kuda adalah satu-satunya bidak yang bisa melompati bidak lain.</li>
+                            <li><strong>Pion (Pawn):</strong> Bergerak maju satu kotak. Pada langkah pertamanya, pion bisa maju dua kotak. Pion memakan bidak lawan secara diagonal satu kotak ke depan.</li>
+                        </ul>
+                    </li>
+                    <li><strong>- Promosi:</strong> Jika pion berhasil mencapai baris terakhir papan, pion dapat dipromosikan menjadi Ratu, Benteng, Gajah, atau Kuda.</li>
+                    <li><strong>- Seri (Draw):</strong> Permainan bisa berakhir seri dalam beberapa kondisi, seperti stalemate (raja tidak dalam sekak tapi tidak bisa bergerak), atau pengulangan posisi tiga kali.</li>
+                </ul>
+            </RulesModal>
         </div>
     );
 };

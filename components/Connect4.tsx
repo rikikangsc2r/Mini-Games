@@ -2,8 +2,12 @@ import React, { useState, useCallback, useEffect } from 'react';
 import type { Player } from '../types';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
-import { useOnlineGame, BaseOnlineGameState } from '../hooks/useOnlineGame';
+import { useOnlineGame, BaseOnlineGameState, OnlinePlayer } from '../hooks/useOnlineGame';
 import OnlineGameSetup from './OnlineGameSetup';
+import RulesModal from './RulesModal';
+import PlayerDisplay from './PlayerDisplay';
+import GameLobby from './GameLobby';
+import GameModeSelector from './GameModeSelector';
 
 // --- Global Declarations ---
 declare const firebase: any;
@@ -20,20 +24,29 @@ interface WinningInfo {
 interface OnlineGameState extends BaseOnlineGameState {
     board: BoardState;
     winningLine: { r: number; c: number }[];
+     players: {
+        X: OnlinePlayer | null;
+        O: OnlinePlayer | null;
+    };
 }
 
 // --- Helper Functions ---
 const createInitialBoard = (): BoardState => Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
 
-const createInitialOnlineState = (playerName: string, deviceId: string): OnlineGameState => ({
+const createInitialOnlineState = (playerName: string, deviceId: string, avatarUrl: string): OnlineGameState => ({
     board: createInitialBoard(),
     currentPlayer: 'X',
     winner: null,
     winningLine: [],
-    players: { X: { deviceId, name: playerName }, O: null },
+    players: { X: { deviceId, name: playerName, avatarUrl }, O: null },
     createdAt: firebase.database.ServerValue.TIMESTAMP,
     rematch: { X: false, O: false },
     startingPlayer: 'X',
+});
+
+const getRematchState = (): Partial<OnlineGameState> => ({
+    board: createInitialBoard(),
+    winningLine: [],
 });
 
 const reconstructOnlineState = (gameData: any): OnlineGameState => {
@@ -66,16 +79,17 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
 const Connect4: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const playSound = useSounds();
     const {
-        gameMode, onlineStep, playerName, roomId, playerSymbol, onlineGameState,
-        isLoading, error, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom,
-        handleOnlineBack, handleRematch, changeGameMode, handleChangeNameRequest,
-    } = useOnlineGame('connect4-games', createInitialOnlineState, reconstructOnlineState);
+        gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
+        isLoading, error, roomInputRef, handleProfileSubmit, handleEnterRoom,
+        handleOnlineBack, handleRematch, changeGameMode, handleChangeProfileRequest,
+    } = useOnlineGame('connect4-games', createInitialOnlineState, reconstructOnlineState, getRematchState);
 
     // Local game state
     const [board, setBoard] = useState<BoardState>(createInitialBoard);
     const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
     const [winner, setWinner] = useState<Player | 'Draw' | null>(null);
     const [winningLine, setWinningLine] = useState<{ r: number; c: number }[]>([]);
+    const [showRules, setShowRules] = useState(false);
 
     const checkWinner = useCallback((currentBoard: BoardState): WinningInfo | null => {
         // Horizontal
@@ -120,21 +134,6 @@ const Connect4: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }
         return null;
     }, []);
-
-    useEffect(() => {
-        if (gameMode === 'online' && onlineGameState?.rematch.X && onlineGameState?.rematch.O) {
-            const roomRef = db.ref(`connect4-games/${roomId}`);
-            const newStartingPlayer = onlineGameState.startingPlayer === 'X' ? 'O' : 'X';
-            roomRef.update({
-                board: createInitialBoard(),
-                currentPlayer: newStartingPlayer,
-                winner: null,
-                winningLine: [],
-                rematch: { X: false, O: false },
-                startingPlayer: newStartingPlayer,
-            });
-        }
-    }, [onlineGameState, gameMode, roomId]);
 
     const handleColumnClick = (c: number) => {
         if (gameMode === 'local') {
@@ -239,34 +238,35 @@ const Connect4: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     );
     
     const renderOnlineContent = () => {
-        if (onlineStep === 'name' || onlineStep === 'room') {
-            return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error, handleChangeNameRequest }} />;
+        if (onlineStep !== 'game') {
+            return <OnlineGameSetup {...{ onlineStep, playerProfile, roomInputRef, handleProfileSubmit, handleEnterRoom, isLoading, error, handleChangeProfileRequest }} />;
         }
-        if (onlineStep === 'game') {
-            if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
-            if (!onlineGameState.players.O) {
-                return <div className="text-center"><h2 className="display-5 fw-bold text-white mb-3">Room: {roomId}</h2><p className="fs-5 text-muted">Bagikan nama room ini ke temanmu</p><div className="my-4 d-flex justify-content-center align-items-center gap-2"><div className="spinner-border text-warning" role="status"></div><p className="fs-4 text-warning m-0">Menunggu pemain lain...</p></div></div>;
-            }
-            const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
-            const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
-            return (
-                <div className="text-center">
-                    <div className="mb-4">
-                        <p className="text-muted mb-0">Room: {roomId}</p>
-                        <p className={`mt-3 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
+        if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
+        if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
+
+        const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
+        const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
+        return (
+            <div className="text-center">
+                <div className="mb-4 d-flex flex-column align-items-center gap-3">
+                     <div className="d-flex justify-content-center align-items-center gap-3 w-100" style={{maxWidth: '450px'}}>
+                        <PlayerDisplay player={onlineGameState.players.X} />
+                        <span className="gradient-text fw-bolder fs-4">VS</span>
+                        <PlayerDisplay player={onlineGameState.players.O} />
                     </div>
-                    {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, onlineGameState.currentPlayer === playerSymbol, !!onlineGameState.winner)}
-                    {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-4 btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
+                    <p className="text-muted mb-0">Room: {roomId}</p>
+                    <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
                 </div>
-            );
-        }
-        return null;
+                {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, onlineGameState.currentPlayer === playerSymbol, !!onlineGameState.winner)}
+                {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-4 btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
+            </div>
+        );
     };
     
     const renderContent = () => {
         switch(gameMode) {
             case 'menu':
-                return <div className="text-center"><h2 className="display-5 fw-bold text-white mb-5">Connect 4</h2><div className="d-grid gap-3 col-sm-8 col-md-6 col-lg-4 mx-auto"><button onClick={() => changeGameMode('local')} className="btn btn-primary btn-lg">Mabar Lokal</button><button onClick={() => changeGameMode('online')} className="btn btn-info btn-lg">Mabar Online</button></div></div>;
+                return <GameModeSelector title="Connect 4" changeGameMode={changeGameMode} />;
             case 'local':
                 return (
                     <div className="text-center">
@@ -283,9 +283,24 @@ const Connect4: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
             <BackButton onClick={gameMode === 'menu' ? onBack : handleOnlineBack} />
             <div className="text-center mb-4">
-              {gameMode !== 'menu' && <h2 className="display-5 fw-bold text-white">Connect 4</h2>}
+              {gameMode !== 'menu' && (
+                 <div className="d-flex justify-content-center align-items-center gap-3">
+                    <h2 className="display-5 fw-bold text-white mb-0">Connect 4</h2>
+                    <button onClick={() => setShowRules(true)} className="btn btn-sm btn-outline-secondary" aria-label="Tampilkan Aturan">Aturan</button>
+                </div>
+              )}
             </div>
             {renderContent()}
+
+            <RulesModal title="Aturan Connect 4" show={showRules} onClose={() => setShowRules(false)}>
+                <p>Tujuan permainan ini adalah menjadi pemain pertama yang menghubungkan empat cakram warnamu secara berurutan.</p>
+                <ul className="list-unstyled ps-3">
+                    <li>- Pemain bergiliran menjatuhkan cakram dari atas ke dalam salah satu dari tujuh kolom.</li>
+                    <li>- Cakram akan jatuh ke posisi terendah yang tersedia di kolom tersebut.</li>
+                    <li>- Kemenangan diraih dengan membentuk barisan empat cakram secara horizontal, vertikal, atau diagonal.</li>
+                    <li>- Jika seluruh papan terisi dan tidak ada yang menang, permainan berakhir seri.</li>
+                </ul>
+            </RulesModal>
         </div>
     );
 };

@@ -1,9 +1,13 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { Player } from '../types';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
-import { useOnlineGame, BaseOnlineGameState } from '../hooks/useOnlineGame';
+import { useOnlineGame, BaseOnlineGameState, OnlinePlayer } from '../hooks/useOnlineGame';
 import OnlineGameSetup from './OnlineGameSetup';
+import RulesModal from './RulesModal';
+import PlayerDisplay from './PlayerDisplay';
+import GameLobby from './GameLobby';
+import GameModeSelector from './GameModeSelector';
 
 // --- Global Declarations & Helpers ---
 declare const firebase: any;
@@ -28,6 +32,10 @@ interface OnlineGameState extends BaseOnlineGameState {
   board: BoardState;
   homePiles: HomePiles;
   winningLine: number[][];
+   players: {
+        X: OnlinePlayer | null;
+        O: OnlinePlayer | null;
+    };
 }
 
 // --- Helper Functions ---
@@ -46,16 +54,22 @@ const createInitialPiles = (): HomePiles => {
 const createInitialBoard = (): BoardState =>
   Array(3).fill(null).map(() => Array(3).fill(null).map(() => []));
 
-const createInitialOnlineState = (playerName: string, deviceId: string): OnlineGameState => ({
+const createInitialOnlineState = (playerName: string, deviceId: string, avatarUrl: string): OnlineGameState => ({
   board: createInitialBoard(),
   homePiles: createInitialPiles(),
   currentPlayer: 'X',
   winner: null,
   winningLine: [],
-  players: { X: { deviceId, name: playerName }, O: null },
+  players: { X: { deviceId, name: playerName, avatarUrl }, O: null },
   createdAt: firebase.database.ServerValue.TIMESTAMP,
   rematch: { X: false, O: false },
   startingPlayer: 'X',
+});
+
+const getRematchState = (): Partial<OnlineGameState> => ({
+    board: createInitialBoard(),
+    homePiles: createInitialPiles(),
+    winningLine: [],
 });
 
 const reconstructOnlineState = (gameData: any): OnlineGameState => {
@@ -112,26 +126,26 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
   const [winner, setWinner] = useState<Player | null>(null);
   const [winningLine, setWinningLine] = useState<number[][]>([]);
+  const [showRules, setShowRules] = useState(false);
   
   // Online hook
   const {
       gameMode,
       onlineStep,
-      playerName,
+      playerProfile,
       roomId,
       playerSymbol,
       onlineGameState,
       isLoading,
       error,
-      nameInputRef,
       roomInputRef,
-      handleNameSubmit,
+      handleProfileSubmit,
       handleEnterRoom,
       handleOnlineBack,
       handleRematch,
       changeGameMode,
-      handleChangeNameRequest,
-  } = useOnlineGame('gobblet-games', createInitialOnlineState, reconstructOnlineState);
+      handleChangeProfileRequest,
+  } = useOnlineGame('gobblet-games', createInitialOnlineState, reconstructOnlineState, getRematchState);
 
   // --- Game Logic ---
   const checkWinner = useCallback((currentBoard: BoardState): { winner: Player; line: number[][] } | null => {
@@ -153,22 +167,6 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
     return null;
   }, []);
-
-  useEffect(() => {
-    if (gameMode === 'online' && onlineGameState?.rematch.X && onlineGameState?.rematch.O) {
-        const roomRef = db.ref(`gobblet-games/${roomId}`);
-        const newStartingPlayer = onlineGameState.startingPlayer === 'X' ? 'O' : 'X';
-        roomRef.update({
-            board: createInitialBoard(),
-            homePiles: createInitialPiles(),
-            currentPlayer: newStartingPlayer,
-            winner: null,
-            winningLine: [],
-            rematch: { X: false, O: false },
-            startingPlayer: newStartingPlayer
-        });
-    }
-  }, [onlineGameState, gameMode, roomId]);
   
   const resetLocalGame = useCallback(() => {
     playSound('select');
@@ -322,7 +320,7 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     );
   };
   
-  const HomePileComponent: React.FC<{ player: Player }> = ({ player }) => {
+  const HomePileComponent: React.FC<{ player: Player, playerInfo: OnlinePlayer | null }> = ({ player, playerInfo }) => {
     const isOnline = gameMode === 'online';
     const gs = isOnline ? onlineGameState : { currentPlayer, winner, homePiles };
     if (!gs) return null;
@@ -332,23 +330,30 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const canInteract = isOnline ? (isPlayerTurn && player === playerSymbol) : isPlayerTurn;
     
     return (
-      <div className={`d-flex justify-content-center gap-3 p-3 bg-secondary rounded-3 shadow ${isPlayerTurn ? 'border border-3 border-info' : ''}`} style={{ transition: 'border 0.3s ease' }}>
-        {piles[player].map((pile, pileIndex) => {
-          const isSelected = selection?.from === 'home' && selection.homePileIndex === pileIndex && selection.piece.player === player;
-          const topPiece = pile.length > 0 ? pile[pile.length - 1] : null;
-          return (
-            <div
-              key={pileIndex}
-              className="rounded-3 position-relative"
-              style={{ width: '80px', height: '80px', backgroundColor: '#343a40', cursor: topPiece && canInteract ? 'pointer' : 'default'}}
-              onClick={() => canInteract && handleHomePieceClick(player, pileIndex)}
-            >
-              {pile.map((piece, i) => (
-                 <PieceComponent key={i} piece={piece} isTop={i === pile.length - 1} isSelected={isSelected && i === pile.length - 1} />
-              ))}
-            </div>
-          );
-        })}
+     <div className={`d-flex flex-column align-items-center gap-2 ${isPlayerTurn ? 'border border-3 border-info' : ''} p-2 rounded-3`} style={{transition: 'border 0.3s ease', backgroundColor: '#212529'}}>
+        {isOnline ? (
+            <PlayerDisplay player={playerInfo} />
+        ) : (
+            <span className="fw-bold text-light">Pemain {player}</span>
+        )}
+        <div className="d-flex justify-content-center gap-3 p-2 bg-secondary rounded-3 shadow">
+            {piles[player].map((pile, pileIndex) => {
+              const isSelected = selection?.from === 'home' && selection.homePileIndex === pileIndex && selection.piece.player === player;
+              const topPiece = pile.length > 0 ? pile[pile.length - 1] : null;
+              return (
+                <div
+                  key={pileIndex}
+                  className="rounded-3 position-relative"
+                  style={{ width: '80px', height: '80px', backgroundColor: '#343a40', cursor: topPiece && canInteract ? 'pointer' : 'default'}}
+                  onClick={() => canInteract && handleHomePieceClick(player, pileIndex)}
+                >
+                  {pile.map((piece, i) => (
+                     <PieceComponent key={i} piece={piece} isTop={i === pile.length - 1} isSelected={isSelected && i === pile.length - 1} />
+                  ))}
+                </div>
+              );
+            })}
+        </div>
       </div>
     );
   };
@@ -380,48 +385,42 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   const renderOnlineContent = () => {
-    if (onlineStep === 'name' || onlineStep === 'room') {
-        return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error, handleChangeNameRequest }} />;
+    if (onlineStep !== 'game') {
+        return <OnlineGameSetup {...{ onlineStep, playerProfile, roomInputRef, handleProfileSubmit, handleEnterRoom, isLoading, error, handleChangeProfileRequest }} />;
     }
-
-    if (onlineStep === 'game') {
-        if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
-        if (!onlineGameState.players.O) {
-          return <div className="text-center"><h2 className="display-5 fw-bold text-white mb-3">Room: {roomId}</h2><p className="fs-5 text-muted">Bagikan nama room ini ke temanmu</p><div className="my-4 d-flex justify-content-center align-items-center gap-2"><div className="spinner-border text-warning" role="status"></div><p className="fs-4 text-warning m-0">Menunggu pemain lain...</p></div></div>;
-        }
-        
-        const mySymbol = playerSymbol!;
-        const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
-        const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
-        const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
-        
-        return (
-          <div className="d-flex flex-column align-items-center gap-4">
-            <div className="text-center">
-              <p className="text-muted mb-0">Room: {roomId}</p>
-              <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
-            </div>
-            <HomePileComponent player={opponentSymbol} />
-            {renderGameBoard(onlineGameState.board, onlineGameState.winningLine)}
-            <HomePileComponent player={mySymbol} />
-            {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-3 btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
-          </div>
-        );
-    }
-    return null;
+    if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
+    if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
+    
+    const mySymbol = playerSymbol!;
+    const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
+    const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
+    const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
+    
+    return (
+      <div className="d-flex flex-column align-items-center gap-4">
+        <div className="text-center">
+          <p className="text-muted mb-0">Room: {roomId}</p>
+          <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
+        </div>
+        <HomePileComponent player={opponentSymbol} playerInfo={onlineGameState.players[opponentSymbol]} />
+        {renderGameBoard(onlineGameState.board, onlineGameState.winningLine)}
+        <HomePileComponent player={mySymbol} playerInfo={onlineGameState.players[mySymbol]} />
+        {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-3 btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
+      </div>
+    );
   };
   
   const renderContent = () => {
     switch(gameMode) {
       case 'menu':
-        return <div className="text-center"><h2 className="display-5 fw-bold text-white mb-5">Gobblet Gobblers</h2><div className="d-grid gap-3 col-sm-8 col-md-6 col-lg-4 mx-auto"><button onClick={() => changeGameMode('local')} className="btn btn-primary btn-lg">Mabar Lokal</button><button onClick={() => changeGameMode('online')} className="btn btn-info btn-lg">Mabar Online</button></div></div>;
+        return <GameModeSelector title="Gobblet Gobblers" changeGameMode={changeGameMode} />;
       case 'local':
         return (
           <div className="d-flex flex-column align-items-center gap-4">
             <div className="text-center"><p className={`mt-2 fs-4 fw-semibold ${winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p></div>
-            <HomePileComponent player="O" />
+            <HomePileComponent player="O" playerInfo={null} />
             {renderGameBoard(board, winningLine)}
-            <HomePileComponent player="X" />
+            <HomePileComponent player="X" playerInfo={null} />
             {winner && <button onClick={resetLocalGame} className="mt-3 btn btn-primary btn-lg">Main Lagi</button>}
           </div>
         );
@@ -434,9 +433,29 @@ const GobbletGobblers: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
       <BackButton onClick={gameMode === 'menu' ? onBack : handleBack} />
        <div className="text-center mb-4">
-         {gameMode !== 'menu' && <h2 className="display-5 fw-bold text-white">Gobblet Gobblers</h2>}
+         {gameMode !== 'menu' && (
+            <div className="d-flex justify-content-center align-items-center gap-3">
+                <h2 className="display-5 fw-bold text-white mb-0">Gobblet Gobblers</h2>
+                <button onClick={() => setShowRules(true)} className="btn btn-sm btn-outline-secondary" aria-label="Tampilkan Aturan">Aturan</button>
+            </div>
+         )}
        </div>
       {renderContent()}
+
+      <RulesModal title="Aturan Gobblet Gobblers" show={showRules} onClose={() => setShowRules(false)}>
+            <p>Seperti Tic-Tac-Toe, tujuannya adalah mendapatkan tiga bidak warnamu secara berurutan.</p>
+            <ul className="list-unstyled ps-3">
+              <li>- Setiap pemain memiliki 6 bidak dalam 3 ukuran berbeda (2 kecil, 2 sedang, 2 besar).</li>
+              <li>- Pada giliranmu, kamu bisa:
+                <ol type="a" className="ps-4">
+                  <li>Memainkan bidak baru dari tumpukanmu ke kotak kosong.</li>
+                  <li>Memindahkan salah satu bidakmu yang sudah ada di papan ke kotak lain.</li>
+                </ol>
+              </li>
+              <li>- Kamu bisa menempatkan bidak yang lebih besar di atas bidak yang lebih kecil (milikmu atau lawan), ini disebut 'Gobbling'.</li>
+              <li>- Hati-hati! Jika kamu memindahkan bidak yang menutupi bidak lawan, bidak lawan akan terungkap dan bisa membantu mereka menang.</li>
+            </ul>
+        </RulesModal>
     </div>
   );
 };

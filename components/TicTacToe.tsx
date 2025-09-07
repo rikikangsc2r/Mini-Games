@@ -3,8 +3,12 @@ import type { Player } from '../types';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
 import GameBoard from './GameBoard';
-import { useOnlineGame, BaseOnlineGameState } from '../hooks/useOnlineGame';
+import { useOnlineGame, BaseOnlineGameState, OnlinePlayer } from '../hooks/useOnlineGame';
 import OnlineGameSetup from './OnlineGameSetup';
+import RulesModal from './RulesModal';
+import PlayerDisplay from './PlayerDisplay';
+import GameLobby from './GameLobby';
+import GameModeSelector from './GameModeSelector';
 
 // Objek firebase global dari skrip di index.html
 declare const firebase: any;
@@ -13,18 +17,28 @@ const db = firebase.database();
 interface OnlineGameState extends BaseOnlineGameState {
     board: (Player | null)[];
     winningLine: number[];
+    players: {
+        X: OnlinePlayer | null;
+        O: OnlinePlayer | null;
+    };
 }
 
-const createInitialOnlineState = (playerName: string, deviceId: string): OnlineGameState => ({
+const createInitialOnlineState = (playerName: string, deviceId: string, avatarUrl: string): OnlineGameState => ({
     board: Array(9).fill(null),
     currentPlayer: 'X',
     winner: null,
     winningLine: [],
-    players: { X: { deviceId, name: playerName }, O: null },
+    players: { X: { deviceId, name: playerName, avatarUrl }, O: null },
     createdAt: firebase.database.ServerValue.TIMESTAMP,
     rematch: { X: false, O: false },
     startingPlayer: 'X',
 });
+
+const getRematchState = (): Partial<OnlineGameState> => ({
+    board: Array(9).fill(null),
+    winningLine: [],
+});
+
 
 const reconstructOnlineState = (gameData: any): OnlineGameState => {
     const reconstructedBoard = Array(9).fill(null);
@@ -50,27 +64,27 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const {
       gameMode,
       onlineStep,
-      playerName,
+      playerProfile,
       roomId,
       playerSymbol,
       onlineGameState,
       isLoading,
       error,
-      nameInputRef,
       roomInputRef,
-      handleNameSubmit,
+      handleProfileSubmit,
       handleEnterRoom,
       handleOnlineBack,
       handleRematch,
       changeGameMode,
-      handleChangeNameRequest,
-  } = useOnlineGame('games', createInitialOnlineState, reconstructOnlineState);
+      handleChangeProfileRequest,
+  } = useOnlineGame('games', createInitialOnlineState, reconstructOnlineState, getRematchState);
   
   // State game lokal
   const [board, setBoard] = useState<(Player | null)[]>(Array(9).fill(null));
   const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
   const [winner, setWinner] = useState<Player | 'Draw' | null>(null);
   const [winningLine, setWinningLine] = useState<number[]>([]);
+  const [showRules, setShowRules] = useState(false);
 
   const calculateWinner = useCallback((squares: (Player | null)[]): { winner: Player | 'Draw', line: number[] } | null => {
     const lines = [
@@ -103,23 +117,6 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       setWinningLine(result.line);
     }
   }, [board, gameMode, calculateWinner, playSound, winner]);
-
-  // Efek untuk rematch online
-  useEffect(() => {
-    if (gameMode === 'online' && onlineGameState?.rematch.X && onlineGameState?.rematch.O) {
-        const roomRef = db.ref(`games/${roomId}`);
-        const newStartingPlayer = onlineGameState.startingPlayer === 'X' ? 'O' : 'X';
-        roomRef.update({
-            board: Array(9).fill(null),
-            currentPlayer: newStartingPlayer,
-            winner: null,
-            winningLine: [],
-            rematch: { X: false, O: false },
-            startingPlayer: newStartingPlayer
-        });
-    }
-  }, [onlineGameState, gameMode, roomId]);
-
 
   const handleLocalClick = (index: number) => {
     if (winner || board[index]) return;
@@ -198,66 +195,45 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         disabled={!isGameActive}
       />
   );
-
+  
   const renderOnlineContent = () => {
-      if (onlineStep === 'name' || onlineStep === 'room') {
-        return <OnlineGameSetup {...{ onlineStep, playerName, nameInputRef, roomInputRef, handleNameSubmit, handleEnterRoom, isLoading, error, handleChangeNameRequest }} />;
+      if (onlineStep !== 'game') {
+        return <OnlineGameSetup {...{ onlineStep, playerProfile, roomInputRef, handleProfileSubmit, handleEnterRoom, isLoading, error, handleChangeProfileRequest }} />;
       }
+      if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
+      if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
 
-      if (onlineStep === 'game') {
-        if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
-        
-        if (!onlineGameState.players.O) { // Tampilan Lobby
-            return (
-                <div className="text-center">
-                    <h2 className="display-5 fw-bold text-white mb-3">Room: {roomId}</h2>
-                    <p className="fs-5 text-muted">Bagikan nama room ini ke temanmu</p>
-                     <div className="my-4 d-flex justify-content-center align-items-center gap-2">
-                          <div className="spinner-border text-warning" role="status"><span className="visually-hidden">Loading...</span></div>
-                          <p className="fs-4 text-warning m-0">Menunggu pemain lain...</p>
-                      </div>
-                </div>
-            );
-        }
-
-        const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
-        const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
-        return (
-            <div className="text-center">
-                <div className="mb-4">
-                    <h2 className="display-5 fw-bold text-white">{onlineGameState.players.X?.name || '?'} vs {onlineGameState.players.O?.name || '?'}</h2>
-                    <p className="text-muted mb-0">Room: {roomId}</p>
-                    <p className={`mt-3 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
-                </div>
-                {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, handleOnlineClick, onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner)}
-                {onlineGameState.winner && (
-                    <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-5 btn btn-primary btn-lg">
-                          Rematch ({rematchCount}/2)
-                    </button>
-                )}
-            </div>
-        );
-      }
-      return null;
+      const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
+      const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
+      return (
+          <div className="text-center">
+              <div className="mb-4 d-flex flex-column align-items-center gap-3">
+                  <div className="d-flex justify-content-center align-items-center gap-3 w-100" style={{maxWidth: '450px'}}>
+                      <PlayerDisplay player={onlineGameState.players.X} />
+                      <span className="gradient-text fw-bolder fs-4">VS</span>
+                      <PlayerDisplay player={onlineGameState.players.O} />
+                  </div>
+                  <p className="text-muted mb-0">Room: {roomId}</p>
+                  <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
+              </div>
+              {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, handleOnlineClick, onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner)}
+              {onlineGameState.winner && (
+                  <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-5 btn btn-primary btn-lg">
+                        Rematch ({rematchCount}/2)
+                  </button>
+              )}
+          </div>
+      );
   };
 
   const renderContent = () => {
     switch(gameMode) {
       case 'menu':
-        return (
-          <div className="text-center">
-            <h2 className="display-5 fw-bold text-white mb-5">Tic-Tac-Toe</h2>
-            <div className="d-grid gap-3 col-sm-8 col-md-6 col-lg-4 mx-auto">
-              <button onClick={() => changeGameMode('local')} className="btn btn-primary btn-lg">Mabar Lokal</button>
-              <button onClick={() => changeGameMode('online')} className="btn btn-info btn-lg">Mabar Online</button>
-            </div>
-          </div>
-        );
+        return <GameModeSelector title="Tic-Tac-Toe" changeGameMode={changeGameMode} />;
       case 'local':
         return (
           <div className="text-center">
             <div className="mb-5">
-                <h2 className="display-5 fw-bold text-white">Tic-Tac-Toe Lokal</h2>
                 <p className={`mt-4 fs-4 fw-semibold ${winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
             </div>
             {renderGameBoard(board, winningLine, handleLocalClick, !winner)}
@@ -272,7 +248,28 @@ const TicTacToe: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   return (
     <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
       <BackButton onClick={gameMode === 'menu' ? onBack : handleBack} />
+      
+      {gameMode !== 'menu' && (
+        <div className="text-center mb-4">
+          <div className="d-flex justify-content-center align-items-center gap-3">
+            <h2 className="display-5 fw-bold text-white mb-0">Tic-Tac-Toe</h2>
+            <button onClick={() => setShowRules(true)} className="btn btn-sm btn-outline-secondary" aria-label="Tampilkan Aturan">Aturan</button>
+          </div>
+        </div>
+      )}
+
       {renderContent()}
+
+      <RulesModal title="Aturan Tic-Tac-Toe" show={showRules} onClose={() => setShowRules(false)}>
+        <p>Tujuan permainan ini adalah menjadi pemain pertama yang mendapatkan tiga tanda (X atau O) berturut-turut.</p>
+        <ul className="list-unstyled ps-3">
+          <li>- Papan permainan berukuran 3x3 kotak.</li>
+          <li>- Pemain X memulai lebih dulu.</li>
+          <li>- Pemain bergiliran menempatkan tanda mereka di kotak kosong.</li>
+          <li>- Barisan dapat berupa horizontal, vertikal, atau diagonal.</li>
+          <li>- Jika semua kotak terisi dan tidak ada pemenang, permainan berakhir seri.</li>
+        </ul>
+      </RulesModal>
     </div>
   );
 };

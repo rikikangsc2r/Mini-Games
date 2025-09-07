@@ -25,6 +25,12 @@ function usePrevious<T>(value: T): T | undefined {
 export interface OnlinePlayer {
     deviceId: string;
     name: string;
+    avatarUrl: string;
+}
+
+export interface PlayerProfile {
+    name: string;
+    avatarUrl: string;
 }
 
 export interface BaseOnlineGameState {
@@ -40,48 +46,51 @@ export interface BaseOnlineGameState {
 }
 
 export type GameMode = 'menu' | 'local' | 'online';
-export type OnlineStep = 'name' | 'room' | 'game';
+export type OnlineStep = 'profile' | 'room' | 'game';
 
 export const useOnlineGame = <T extends BaseOnlineGameState>(
     gameDbKey: string,
-    createInitialGameState: (playerName: string, deviceId: string) => T,
+    createInitialGameState: (playerName: string, deviceId: string, avatarUrl: string) => T,
     reconstructState: (firebaseData: any) => T,
+    getRematchState: () => Partial<T>
 ) => {
     const [gameMode, setGameMode] = useState<GameMode>('menu');
-    const [onlineStep, setOnlineStep] = useState<OnlineStep>('name');
+    const [onlineStep, setOnlineStep] = useState<OnlineStep>('profile');
     const playSound = useSounds();
     
-    const [playerName, setPlayerName] = useState('');
+    const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
     const [roomId, setRoomId] = useState('');
     const [playerSymbol, setPlayerSymbol] = useState<Player | null>(null);
     const [onlineGameState, setOnlineGameState] = useState<T | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     
-    const nameInputRef = useRef<HTMLInputElement>(null);
     const roomInputRef = useRef<HTMLInputElement>(null);
     const deviceId = useRef<string>(getDeviceId());
     const prevOnlineGameState = usePrevious(onlineGameState);
 
     useEffect(() => {
-        const storedName = localStorage.getItem('playerName');
-        if (storedName) {
-            setPlayerName(storedName);
-            setOnlineStep('room');
+        const storedProfile = localStorage.getItem('playerProfile');
+        if (storedProfile) {
+            try {
+                const profile = JSON.parse(storedProfile);
+                if (profile && profile.name && profile.avatarUrl) {
+                    setPlayerProfile(profile);
+                    setOnlineStep('room');
+                }
+            } catch (e) {
+                localStorage.removeItem('playerProfile');
+            }
         }
     }, []);
 
-    const handleNameSubmit = () => {
-        const name = nameInputRef.current?.value.trim();
-        if (name) {
-            playSound('select');
-            setPlayerName(name);
-            localStorage.setItem('playerName', name);
-            setOnlineStep('room');
-            setError('');
-        } else {
-            setError('Nama tidak boleh kosong.');
-        }
+    const handleProfileSubmit = (name: string, avatarUrl: string) => {
+        const profile = { name, avatarUrl };
+        playSound('select');
+        setPlayerProfile(profile);
+        localStorage.setItem('playerProfile', JSON.stringify(profile));
+        setOnlineStep('room');
+        setError('');
     };
 
     const handleEnterRoom = useCallback(async () => {
@@ -90,6 +99,12 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
             setError('Nama room tidak boleh kosong.');
             return;
         }
+        if (!playerProfile) {
+            setError('Profil pemain tidak ditemukan. Harap atur profil Anda.');
+            setOnlineStep('profile');
+            return;
+        }
+
         playSound('select');
         setIsLoading(true);
         setError('');
@@ -101,7 +116,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
             const isExpired = gameData && (Date.now() - gameData.createdAt > 3600 * 1000); // 1 hour
 
             if (!snapshot.exists() || isExpired) {
-                const newGame = createInitialGameState(playerName, deviceId.current);
+                const newGame = createInitialGameState(playerProfile.name, deviceId.current, playerProfile.avatarUrl);
                 await roomRef.set(newGame);
                 setRoomId(enteredRoomId);
                 setPlayerSymbol('X');
@@ -116,7 +131,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
                     setPlayerSymbol('O');
                     setOnlineStep('game');
                 } else if (!gameData.players.O) {
-                    await roomRef.child('players/O').set({ deviceId: deviceId.current, name: playerName });
+                    await roomRef.child('players/O').set({ deviceId: deviceId.current, name: playerProfile.name, avatarUrl: playerProfile.avatarUrl });
                     setRoomId(enteredRoomId);
                     setPlayerSymbol('O');
                     setOnlineStep('game');
@@ -130,8 +145,30 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         } finally {
             setIsLoading(false);
         }
-    }, [playerName, playSound, gameDbKey, createInitialGameState]);
+    }, [playerProfile, playSound, gameDbKey, createInitialGameState]);
     
+    // Abstracted rematch logic
+    useEffect(() => {
+        if (gameMode === 'online' && onlineGameState?.rematch.X && onlineGameState?.rematch.O) {
+            const roomRef = db.ref(`${gameDbKey}/${roomId}`);
+            const newStartingPlayer = onlineGameState.startingPlayer === 'X' ? 'O' : 'X';
+            
+            const commonResetState = {
+                currentPlayer: newStartingPlayer,
+                winner: null,
+                rematch: { X: false, O: false },
+                startingPlayer: newStartingPlayer,
+            };
+
+            const gameSpecificResetState = getRematchState();
+            
+            roomRef.update({
+                ...commonResetState,
+                ...gameSpecificResetState,
+            });
+        }
+    }, [onlineGameState, gameMode, roomId, gameDbKey, getRematchState]);
+
     const changeGameMode = (mode: GameMode) => {
         playSound('select');
         setGameMode(mode);
@@ -143,9 +180,9 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         db.ref(`${gameDbKey}/${roomId}/rematch/${playerSymbol}`).set(true);
     };
 
-    const handleChangeNameRequest = useCallback(() => {
+    const handleChangeProfileRequest = useCallback(() => {
         playSound('back');
-        setOnlineStep('name');
+        setOnlineStep('profile');
     }, [playSound]);
 
     const handleOnlineBack = useCallback(() => {
@@ -155,14 +192,17 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
             setRoomId('');
             setPlayerSymbol(null);
             setOnlineGameState(null);
-            setOnlineStep('room');
-            if (onlineStep === 'room') {
+            if (playerProfile) {
+                setOnlineStep('room');
+                setGameMode('online');
+            } else {
+                setOnlineStep('profile');
                 setGameMode('menu');
             }
-        } else if (onlineStep === 'name') {
+        } else if (onlineStep === 'profile') {
             setGameMode('menu');
         }
-    }, [onlineStep, playSound]);
+    }, [onlineStep, playSound, playerProfile]);
 
     const firebaseListenerCallback = useCallback((snapshot: any) => {
         if (snapshot.exists()) {
@@ -217,19 +257,18 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
     return {
         gameMode,
         onlineStep,
-        playerName,
+        playerProfile,
         roomId,
         playerSymbol,
         onlineGameState,
         isLoading,
         error,
-        nameInputRef,
         roomInputRef,
-        handleNameSubmit,
+        handleProfileSubmit,
         handleEnterRoom,
         handleOnlineBack,
         handleRematch,
         changeGameMode,
-        handleChangeNameRequest,
+        handleChangeProfileRequest,
     };
 };

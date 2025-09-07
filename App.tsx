@@ -1,14 +1,14 @@
-import React, { useState, useCallback, useEffect, Suspense } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { GameID } from './types';
 import GameCard from './components/GameCard';
 import Header from './components/Header';
 import useSounds from './components/useSounds';
 
-// Lazy load game components for code-splitting
-const TicTacToe = React.lazy(() => import('./components/TicTacToe'));
-const GobbletGobblers = React.lazy(() => import('./components/GobbletGobblers'));
-const Chess = React.lazy(() => import('./components/Chess'));
-const Connect4 = React.lazy(() => import('./components/Connect4'));
+// Impor langsung komponen game untuk fungsionalitas offline
+import TicTacToe from './components/TicTacToe';
+import GobbletGobblers from './components/GobbletGobblers';
+import Chess from './components/Chess';
+import Connect4 from './components/Connect4';
 
 const TicTacToeIcon = () => (
   <svg viewBox="0 0 100 100" style={{ width: '100%', height: 'auto', padding: '1rem', maxHeight: '150px' }}>
@@ -69,29 +69,19 @@ const Connect4Icon = () => (
     </svg>
 );
 
-const getGameFromHash = (): GameID => {
-    const hash = window.location.hash.replace('#', '');
-    const validGames: GameID[] = ['tictactoe', 'gobblet', 'chess', 'connect4'];
-    if (validGames.includes(hash as GameID)) {
-        return hash as GameID;
-    }
-    return 'menu';
-}
-
 const App: React.FC = () => {
-  const [currentGame, setCurrentGame] = useState<GameID>(getGameFromHash);
+  const [currentGame, setCurrentGame] = useState<GameID>('menu');
   const playSound = useSounds();
   
-  // Listen to hash changes to navigate
-  useEffect(() => {
-    const handleHashChange = () => {
-        const newGame = getGameFromHash();
-        if (newGame === 'menu' && currentGame !== 'menu') playSound('back');
-        setCurrentGame(newGame);
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [playSound, currentGame]);
+  const handleSelectGame = (gameId: GameID) => {
+    playSound('select');
+    setCurrentGame(gameId);
+  };
+  
+  const handleBackToMenu = () => {
+      playSound('back');
+      setCurrentGame('menu');
+  };
 
   // SEO: Dynamically update page title
   useEffect(() => {
@@ -116,25 +106,17 @@ const App: React.FC = () => {
   const renderGame = () => {
     switch (currentGame) {
       case 'tictactoe':
-        return <TicTacToe />;
+        return <TicTacToe onBackToMenu={handleBackToMenu} />;
       case 'gobblet':
-        return <GobbletGobblers />;
+        return <GobbletGobblers onBackToMenu={handleBackToMenu} />;
       case 'chess':
-        return <Chess />;
+        return <Chess onBackToMenu={handleBackToMenu} />;
       case 'connect4':
-        return <Connect4 />;
+        return <Connect4 onBackToMenu={handleBackToMenu} />;
       default:
         return null;
     }
   };
-
-  const SuspenseFallback = () => (
-    <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '60vh' }}>
-        <div className="spinner-border text-info" style={{ width: '3rem', height: '3rem' }} role="status">
-            <span className="visually-hidden">Memuat Game...</span>
-        </div>
-    </div>
-  );
 
   return (
     <div className="min-vh-100 p-3 p-sm-4 p-md-5">
@@ -147,8 +129,7 @@ const App: React.FC = () => {
                 title="Tic-Tac-Toe"
                 description="Permainan klasik X dan O. Tantang teman dalam duel dua pemain yang sederhana namun strategis ini."
                 svgIcon={<TicTacToeIcon />}
-                href="#tictactoe"
-                onClick={() => playSound('select')}
+                onClick={() => handleSelectGame('tictactoe')}
               />
             </div>
             <div className="col-12 col-md-6 col-lg-6">
@@ -156,8 +137,7 @@ const App: React.FC = () => {
                 title="Gobblet Gobblers"
                 description="Sentuhan cerdas pada Tic-Tac-Toe. Makan jalanmu menuju kemenangan dalam permainan dua pemain yang seru ini!"
                 svgIcon={<GobbletIcon />}
-                href="#gobblet"
-                onClick={() => playSound('select')}
+                onClick={() => handleSelectGame('gobblet')}
               />
             </div>
             <div className="col-12 col-md-6 col-lg-6">
@@ -165,8 +145,7 @@ const App: React.FC = () => {
                 title="Catur"
                 description="Permainan strategi terbaik. Uji kecerdasan Anda melawan lawan dalam pertarungan abadi yang mengasah otak."
                 svgIcon={<ChessIcon />}
-                href="#chess"
-                onClick={() => playSound('select')}
+                onClick={() => handleSelectGame('chess')}
               />
             </div>
             <div className="col-12 col-md-6 col-lg-6">
@@ -174,15 +153,12 @@ const App: React.FC = () => {
                 title="Connect 4"
                 description="Jatuhkan cakram Anda dan jadilah yang pertama mendapatkan empat cakram berturut-turut. Bisakah Anda mengakali lawan?"
                 svgIcon={<Connect4Icon />}
-                href="#connect4"
-                onClick={() => playSound('select')}
+                onClick={() => handleSelectGame('connect4')}
               />
             </div>
           </div>
         ) : (
-          <Suspense fallback={<SuspenseFallback />}>
-            {renderGame()}
-          </Suspense>
+          renderGame()
         )}
       </main>
     </div>

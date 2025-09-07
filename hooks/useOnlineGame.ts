@@ -52,7 +52,8 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
     gameDbKey: string,
     createInitialGameState: (playerName: string, deviceId: string, avatarUrl: string) => T,
     reconstructState: (firebaseData: any) => T,
-    getRematchState: () => Partial<T>
+    getRematchState: () => Partial<T>,
+    onBackToMainMenu: () => void
 ) => {
     const [gameMode, setGameMode] = useState<GameMode>('menu');
     const [onlineStep, setOnlineStep] = useState<OnlineStep>('profile');
@@ -83,7 +84,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
             }
         }
     }, []);
-
+    
     const handleProfileSubmit = (name: string, avatarUrl: string) => {
         const profile = { name, avatarUrl };
         playSound('select');
@@ -113,32 +114,38 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         try {
             const snapshot = await roomRef.get();
             const gameData: T | null = snapshot.val();
-            const isExpired = gameData && (Date.now() - gameData.createdAt > 3600 * 1000); // 1 hour
+            const isExpired = gameData && (Date.now() - gameData.createdAt > 3600 * 1000 * 3); // 3 hours
+
+            let joined = false;
+            let symbol: Player | null = null;
 
             if (!snapshot.exists() || isExpired) {
                 const newGame = createInitialGameState(playerProfile.name, deviceId.current, playerProfile.avatarUrl);
                 await roomRef.set(newGame);
-                setRoomId(enteredRoomId);
-                setPlayerSymbol('X');
-                setOnlineStep('game');
+                symbol = 'X';
+                joined = true;
             } else {
                 if (gameData.players.X?.deviceId === deviceId.current) {
-                    setRoomId(enteredRoomId);
-                    setPlayerSymbol('X');
-                    setOnlineStep('game');
+                   symbol = 'X';
+                   joined = true;
                 } else if (gameData.players.O?.deviceId === deviceId.current) {
-                    setRoomId(enteredRoomId);
-                    setPlayerSymbol('O');
-                    setOnlineStep('game');
+                    symbol = 'O';
+                    joined = true;
                 } else if (!gameData.players.O) {
                     await roomRef.child('players/O').set({ deviceId: deviceId.current, name: playerProfile.name, avatarUrl: playerProfile.avatarUrl });
-                    setRoomId(enteredRoomId);
-                    setPlayerSymbol('O');
-                    setOnlineStep('game');
+                    symbol = 'O';
+                    joined = true;
                 } else {
                     setError('Room sudah penuh.');
                 }
             }
+
+            if(joined && symbol) {
+                setRoomId(enteredRoomId);
+                setPlayerSymbol(symbol);
+                setOnlineStep('game');
+            }
+
         } catch (e) {
             setError('Gagal masuk room. Coba lagi.');
             console.error(e);
@@ -185,25 +192,6 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         setOnlineStep('profile');
     }, [playSound]);
 
-    const handleOnlineBack = useCallback(() => {
-        playSound('back');
-        setError('');
-        if (onlineStep === 'game') {
-            // From an active game, go back to the room selection screen.
-            setRoomId('');
-            setPlayerSymbol(null);
-            setOnlineGameState(null);
-            setOnlineStep('room');
-        } else if (onlineStep === 'room' || onlineStep === 'profile') {
-            // From room selection or profile creation, go back to the game's mode selection screen.
-            setGameMode('menu');
-            // Reset online state in case the user goes back into online mode.
-            setRoomId('');
-            setPlayerSymbol(null);
-            setOnlineGameState(null);
-        }
-    }, [onlineStep, playSound]);
-
     const firebaseListenerCallback = useCallback((snapshot: any) => {
         if (snapshot.exists()) {
             const gameData = snapshot.val();
@@ -211,9 +199,9 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
             setOnlineGameState(sanitizedGameData);
         } else {
             setError('Room tidak ada lagi.');
-            handleOnlineBack();
+            onBackToMainMenu();
         }
-    }, [reconstructState, handleOnlineBack]);
+    }, [reconstructState, onBackToMainMenu]);
 
     useEffect(() => {
         if (onlineStep !== 'game' || !roomId) return;
@@ -266,7 +254,6 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         roomInputRef,
         handleProfileSubmit,
         handleEnterRoom,
-        handleOnlineBack,
         handleRematch,
         changeGameMode,
         handleChangeProfileRequest,

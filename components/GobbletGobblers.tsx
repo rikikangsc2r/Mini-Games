@@ -115,7 +115,11 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
   };
 };
 
-const GobbletGobblers: React.FC = () => {
+interface GobbletGobblersProps {
+  onBackToMenu: () => void;
+}
+
+const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
   // --- State ---
   const [selection, setSelection] = useState<Selection | null>(null);
   const playSound = useSounds();
@@ -141,11 +145,10 @@ const GobbletGobblers: React.FC = () => {
       roomInputRef,
       handleProfileSubmit,
       handleEnterRoom,
-      handleOnlineBack,
       handleRematch,
       changeGameMode,
       handleChangeProfileRequest,
-  } = useOnlineGame('gobblet-games', createInitialOnlineState, reconstructOnlineState, getRematchState);
+  } = useOnlineGame('gobblet-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
 
   // --- Game Logic ---
   const checkWinner = useCallback((currentBoard: BoardState): { winner: Player; line: number[][] } | null => {
@@ -423,7 +426,7 @@ const GobbletGobblers: React.FC = () => {
 
   return (
     <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-      <BackButton />
+      <BackButton onClick={gameMode === 'menu' ? onBackToMenu : () => changeGameMode('menu')} />
        <div className="text-center mb-4">
          {gameMode !== 'menu' && (
             <div className="d-flex justify-content-center align-items-center gap-3">

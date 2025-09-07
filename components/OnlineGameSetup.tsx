@@ -1,32 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { PlayerProfile } from '../hooks/useOnlineGame';
-
-const useAvatars = () => {
-  const [avatars, setAvatars] = useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchAvatars = async () => {
-      try {
-        const response = await fetch('https://raw.githubusercontent.com/rikikangsc2-eng/SVG-ICON/refs/heads/main/avatar.json');
-        if (!response.ok) throw new Error('Gagal memuat avatar');
-        const data = await response.json();
-        if (isMounted) setAvatars(data);
-      } catch (err: any) {
-        if (isMounted) setError(err.message || 'Terjadi kesalahan');
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-    fetchAvatars();
-    return () => { isMounted = false; };
-  }, []);
-
-  return { avatars, isLoading, error };
-};
-
+import { useAvatars } from '../hooks/useAvatars';
 
 interface OnlineGameSetupProps {
     onlineStep: 'profile' | 'room';
@@ -49,9 +23,17 @@ const OnlineGameSetup: React.FC<OnlineGameSetupProps> = ({
     error,
     handleChangeProfileRequest,
 }) => {
-    const { avatars, isLoading: avatarsLoading, error: avatarsError } = useAvatars();
     const [selectedAvatar, setSelectedAvatar] = useState<string>('');
     const nameInputRef = useRef<HTMLInputElement>(null);
+    const { avatars, loading: avatarsLoading, error: avatarsError } = useAvatars();
+
+    useEffect(() => {
+        // Secara manual mengosongkan input room saat komponen beralih ke langkah 'room'
+        // untuk mencegah browser mengisinya dengan nama pemain.
+        if (onlineStep === 'room' && roomInputRef.current) {
+            roomInputRef.current.value = '';
+        }
+    }, [onlineStep, roomInputRef]);
 
     const handleSubmit = () => {
         const name = nameInputRef.current?.value.trim();
@@ -60,28 +42,39 @@ const OnlineGameSetup: React.FC<OnlineGameSetupProps> = ({
         }
     };
 
+    const handleAvatarKeyDown = (e: React.KeyboardEvent, url: string) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            setSelectedAvatar(url);
+        }
+    };
+
     if (onlineStep === 'profile') {
         return (
             <div className="text-center col-md-8 col-lg-6 mx-auto">
                 <h2 className="display-5 fw-bold text-white mb-4">Buat Profil Pemain</h2>
-                {avatarsLoading && <div className="spinner-border text-info my-4"></div>}
-                {avatarsError && <p className="text-danger">{avatarsError}</p>}
-                {!avatarsLoading && !avatarsError && (
-                    <div className="mb-4">
-                        <p className="text-muted">Pilih Avatarmu</p>
-                        <div className="avatar-selection-grid">
-                            {Object.entries(avatars).map(([key, url]) => (
+                <div className="mb-4">
+                    <p className="text-muted">Pilih Avatarmu</p>
+                    {avatarsLoading && <div className="spinner-border text-info" role="status"><span className="visually-hidden">Loading...</span></div>}
+                    {avatarsError && <p className="text-danger">{avatarsError}</p>}
+                    {!avatarsLoading && !avatarsError && (
+                         <div className="avatar-selection-grid">
+                            {avatars.map(({ name, url }) => (
                                 <div
-                                    key={key}
+                                    key={name}
                                     className={`avatar-choice ${selectedAvatar === url ? 'selected' : ''}`}
                                     onClick={() => setSelectedAvatar(url)}
+                                    onKeyDown={(e) => handleAvatarKeyDown(e, url)}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`Pilih avatar ${name}`}
+                                    aria-pressed={selectedAvatar === url}
                                 >
-                                    <img src={url} alt={key} loading="lazy" />
+                                    <img src={url} alt={name} />
                                 </div>
                             ))}
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
                 <div className="input-group mb-3">
                     <input ref={nameInputRef} type="text" className="form-control form-control-lg bg-secondary border-secondary text-light" placeholder="Nama Pemain" aria-label="Nama Pemain" />
                 </div>

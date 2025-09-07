@@ -76,13 +76,17 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
     };
 };
 
-const Connect4: React.FC = () => {
+interface Connect4Props {
+    onBackToMenu: () => void;
+}
+
+const Connect4: React.FC<Connect4Props> = ({ onBackToMenu }) => {
     const playSound = useSounds();
     const {
         gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
         isLoading, error, roomInputRef, handleProfileSubmit, handleEnterRoom,
-        handleOnlineBack, handleRematch, changeGameMode, handleChangeProfileRequest,
-    } = useOnlineGame('connect4-games', createInitialOnlineState, reconstructOnlineState, getRematchState);
+        handleRematch, changeGameMode, handleChangeProfileRequest,
+    } = useOnlineGame('connect4-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
 
     // Local game state
     const [board, setBoard] = useState<BoardState>(createInitialBoard);
@@ -281,7 +285,7 @@ const Connect4: React.FC = () => {
 
     return (
         <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-            <BackButton />
+            <BackButton onClick={gameMode === 'menu' ? onBackToMenu : () => changeGameMode('menu')} />
             <div className="text-center mb-4">
               {gameMode !== 'menu' && (
                  <div className="d-flex justify-content-center align-items-center gap-3">

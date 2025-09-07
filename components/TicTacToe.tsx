@@ -59,7 +59,11 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
     };
 };
 
-const TicTacToe: React.FC = () => {
+interface TicTacToeProps {
+  onBackToMenu: () => void;
+}
+
+const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu }) => {
   const playSound = useSounds();
   const {
       gameMode,
@@ -73,11 +77,10 @@ const TicTacToe: React.FC = () => {
       roomInputRef,
       handleProfileSubmit,
       handleEnterRoom,
-      handleOnlineBack,
       handleRematch,
       changeGameMode,
       handleChangeProfileRequest,
-  } = useOnlineGame('games', createInitialOnlineState, reconstructOnlineState, getRematchState);
+  } = useOnlineGame('games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
   
   // State game lokal
   const [board, setBoard] = useState<(Player | null)[]>(Array(9).fill(null));
@@ -239,7 +242,7 @@ const TicTacToe: React.FC = () => {
 
   return (
     <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-      {gameMode === 'menu' ? <BackButton /> : <BackButton />}
+      <BackButton onClick={gameMode === 'menu' ? onBackToMenu : () => changeGameMode('menu')} />
       
       {gameMode !== 'menu' && (
         <div className="text-center mb-4">

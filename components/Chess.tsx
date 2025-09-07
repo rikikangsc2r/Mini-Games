@@ -111,8 +111,11 @@ const SquareComponent: React.FC<SquareProps> = React.memo(({
   );
 });
 
+interface ChessProps {
+  onBackToMenu: () => void;
+}
 
-const Chess: React.FC = () => {
+const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
     // --- State ---
     const [game, setGame] = useState(() => new ChessJS());
     const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
@@ -126,9 +129,9 @@ const Chess: React.FC = () => {
     const {
         gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
         isLoading, error, roomInputRef,
-        handleProfileSubmit, handleEnterRoom, handleOnlineBack, handleRematch, changeGameMode,
+        handleProfileSubmit, handleEnterRoom, handleRematch, changeGameMode,
         handleChangeProfileRequest,
-    } = useOnlineGame('chess-games', createInitialOnlineState, reconstructOnlineState, getRematchState);
+    } = useOnlineGame('chess-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
     
     const prevOnlineGameState = usePrevious(onlineGameState);
 
@@ -462,7 +465,7 @@ const Chess: React.FC = () => {
 
     return (
         <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-            <BackButton />
+            <BackButton onClick={gameMode === 'menu' ? onBackToMenu : () => changeGameMode('menu')} />
             
             {gameMode !== 'menu' && (
                 <div className="text-center mb-4">

@@ -121,7 +121,7 @@ const App: React.FC = () => {
   return (
     <div className="min-vh-100 p-3 p-sm-4 p-md-5">
       <Header />
-      <main className="container mt-5">
+      <main className="container-fluid px-md-5 mt-5">
         {currentGame === 'menu' ? (
           <div className="row g-4 justify-content-center">
             <div className="col-12 col-md-6 col-lg-6">

@@ -339,7 +339,7 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
                 <div
                   key={pileIndex}
                   className="rounded-3 position-relative"
-                  style={{ width: '80px', height: '80px', backgroundColor: '#343a40', cursor: topPiece && canInteract ? 'pointer' : 'default'}}
+                  style={{ width: '90px', height: '90px', backgroundColor: '#343a40', cursor: topPiece && canInteract ? 'pointer' : 'default'}}
                   onClick={() => canInteract && handleHomePieceClick(player, pileIndex)}
                 >
                   {pile.map((piece, i) => (
@@ -357,7 +357,7 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
     const isFlipped = gameMode === 'online' && playerSymbol === 'O';
     const gs = gameMode === 'online' ? onlineGameState : { winner };
     return (
-     <div className="d-grid shadow-lg rounded-3 p-2" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', width: 'clamp(280px, 90vw, 400px)', aspectRatio: '1 / 1', backgroundColor: '#1a1d20' }}>
+     <div className="d-grid shadow-lg rounded-3 p-2" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', width: 'clamp(280px, 90vw, 550px)', aspectRatio: '1 / 1', backgroundColor: '#1a1d20' }}>
       {Array.from({ length: 9 }).map((_, i) => {
         const viewR = Math.floor(i / 3);
         const viewC = i % 3;

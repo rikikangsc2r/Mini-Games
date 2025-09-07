@@ -427,7 +427,7 @@ const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
         const bottomPlayerCapturedColor = myColor === 'w' ? 'b' : 'w';
 
         return (
-            <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '540px'}}>
+            <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '720px'}}>
               {promotionMove && <PromotionChoice onPromote={handlePromotion} color={game.get(promotionMove.from)!.color} />}
               <PlayerInfoBar playerData={onlineGameState.players[opponentSymbol]} capturedColor={topPlayerCapturedColor} />
               {renderBoard()}
@@ -444,7 +444,7 @@ const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
                 return <GameModeSelector title="Catur" changeGameMode={changeGameMode} />;
             case 'local':
                 return (
-                    <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '540px'}}>
+                    <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '720px'}}>
                         {promotionMove && <PromotionChoice onPromote={handlePromotion} color={game.get(promotionMove.from)!.color} />}
                         <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center">
                           <p className="m-0 fw-bold text-start">Pion Hitam (Tertangkap)</p>

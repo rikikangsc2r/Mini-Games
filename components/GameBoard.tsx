@@ -245,7 +245,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     };
 
     return (
-        <div ref={containerRef} className="p-3 rounded-3 shadow-lg" style={{ backgroundColor: '#1a1d20', maxWidth: '450px', width: '90vw', aspectRatio: '1 / 1' }}>
+        <div ref={containerRef} className="p-3 rounded-3 shadow-lg" style={{ backgroundColor: '#1a1d20', maxWidth: '600px', width: '90vw', aspectRatio: '1 / 1' }}>
             <canvas
                 ref={canvasRef}
                 onClick={handleCanvasClick}

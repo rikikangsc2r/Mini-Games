@@ -77,7 +77,7 @@
 
         "chatMessages": {
           // chatMessages is an optional list of messages.
-          ".validate": "!newData.exists() || newData.isArray()",
+          ".validate": "!newData.exists() || newData.hasChildren()",
           "$messageIndex": {
             // Each message must have the correct structure.
             ".validate": "

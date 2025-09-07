@@ -4,9 +4,9 @@ const Header: React.FC = () => {
   return (
     <header className="text-center">
       <h1 className="display-3 fw-bolder gradient-text">
-        Koleksi Game NirKyy
+        NkGame
       </h1>
-      <p className="mt-2 fs-5 text-muted">Game Klasik, Kesenangan Modern</p>
+      <p className="mt-2 fs-5 text-muted">Koleksi Game Klasik, Kesenangan Modern</p>
     </header>
   );
 };

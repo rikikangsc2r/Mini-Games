@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { GameID } from './types';
 import GameCard from './components/GameCard';
 import TicTacToe from './components/TicTacToe';
@@ -71,6 +71,26 @@ const Connect4Icon = () => (
 const App: React.FC = () => {
   const [currentGame, setCurrentGame] = useState<GameID>('menu');
   const playSound = useSounds();
+
+  // SEO: Dynamically update page title
+  useEffect(() => {
+    switch (currentGame) {
+      case 'tictactoe':
+        document.title = 'Tic-Tac-Toe Multiplayer | NkGame';
+        break;
+      case 'gobblet':
+        document.title = 'Gobblet Gobblers Multiplayer | NkGame';
+        break;
+      case 'chess':
+        document.title = 'Catur (Chess) Multiplayer | NkGame';
+        break;
+      case 'connect4':
+        document.title = 'Connect 4 Multiplayer | NkGame';
+        break;
+      default:
+        document.title = 'NkGame - Koleksi Game Papan Online Multiplayer';
+    }
+  }, [currentGame]);
 
   const selectGame = useCallback((gameId: GameID) => {
     playSound('select');

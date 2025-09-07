@@ -52,13 +52,18 @@
         },
 
         "winner": {
-          // Winner is optional. If set, it must be a valid value and can only be set once (from non-existent to a value).
-          ".validate": "
-            !newData.exists() || (
-              !data.exists() &&
-              newData.isString() && (newData.val() === 'X' || newData.val() === 'O' || newData.val() === 'Draw')
-            )
-          "
+            // Winner is optional. If set, it must be a valid value.
+            // This rule allows setting a winner once, and resetting it to null for rematches.
+            ".validate": "
+              // Allow the value to be null (game in progress, or reset for rematch).
+              newData.val() === null ||
+              // If setting a winner, it must be a valid string, and it can only be set if there wasn't a winner before (or the previous value was null).
+              (
+                (!data.exists() || data.val() === null) &&
+                newData.isString() &&
+                (newData.val() === 'X' || newData.val() === 'O' || newData.val() === 'Draw')
+              )
+            "
         },
 
         "createdAt": {
@@ -68,6 +73,20 @@
 
         "rematch": {
           ".validate": "newData.hasChildren(['X', 'O']) && newData.child('X').isBoolean() && newData.child('O').isBoolean()"
+        },
+
+        "chatMessages": {
+          // chatMessages is an optional list of messages.
+          ".validate": "!newData.exists() || newData.isArray()",
+          "$messageIndex": {
+            // Each message must have the correct structure.
+            ".validate": "
+              newData.hasChildren(['senderSymbol', 'type', 'content', 'timestamp']) &&
+              (newData.child('senderSymbol').val() === 'X' || newData.child('senderSymbol').val() === 'O') &&
+              (newData.child('type').val() === 'emote' || newData.child('type').val() === 'quickchat') &&
+              newData.child('content').isString() && newData.child('content').val().length > 0 && newData.child('content').val().length < 50 &&
+              newData.child('timestamp').isNumber()"
+          }
         },
 
         // --- Game-specific validations ---
@@ -93,7 +112,7 @@
             $other === 'players' || $other === 'createdAt' || $other === 'currentPlayer' ||
             $other === 'startingPlayer' || $other === 'rematch' || $other === 'winner' ||
             $other === 'board' || $other === 'winningLine' || $other === 'homePiles' ||
-            $other === 'fen' || $other === 'lastMove'
+            $other === 'fen' || $other === 'lastMove' || $other === 'chatMessages'
           "
         }
       }

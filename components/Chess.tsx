@@ -8,6 +8,8 @@ import RulesModal from './RulesModal';
 import PlayerDisplay from './PlayerDisplay';
 import GameLobby from './GameLobby';
 import GameModeSelector from './GameModeSelector';
+import ChatAndEmotePanel from './ChatAndEmotePanel';
+import InGameMessageDisplay from './InGameMessageDisplay';
 
 // --- Global Declarations & Helpers ---
 declare const firebase: any;
@@ -40,11 +42,13 @@ const createInitialOnlineState = (playerName: string, deviceId: string, avatarUr
     createdAt: firebase.database.ServerValue.TIMESTAMP,
     rematch: { X: false, O: false },
     startingPlayer: 'X',
+    chatMessages: [],
 });
 
 const getRematchState = (): Partial<OnlineChessGameState> => ({
     fen: new ChessJS().fen(),
     lastMove: null,
+    chatMessages: [],
 });
 
 const reconstructOnlineState = (gameData: any): OnlineChessGameState => ({
@@ -53,6 +57,7 @@ const reconstructOnlineState = (gameData: any): OnlineChessGameState => ({
     lastMove: gameData.lastMove || null,
     players: gameData.players || { X: null, O: null },
     rematch: gameData.rematch || { X: false, O: false },
+    chatMessages: gameData.chatMessages || [],
 });
 
 const UNICODE_PIECES: Record<PieceColor, Record<PieceType, string>> = {
@@ -130,7 +135,7 @@ const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
         gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
         isLoading, error, roomInputRef,
         handleProfileSubmit, handleEnterRoom, handleRematch, changeGameMode,
-        handleChangeProfileRequest,
+        handleChangeProfileRequest, sendChatMessage,
     } = useOnlineGame('chess-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
     
     const prevOnlineGameState = usePrevious(onlineGameState);
@@ -416,7 +421,7 @@ const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
         const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
 
         const PlayerInfoBar: React.FC<{playerData: OnlinePlayer | null, capturedColor: PieceColor}> = ({playerData, capturedColor}) => (
-           <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center">
+           <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center position-relative">
                 <PlayerDisplay player={playerData} />
                 <CapturedPiecesDisplay pieces={capturedPieces[capturedColor]} />
            </div>
@@ -427,12 +432,20 @@ const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
         const bottomPlayerCapturedColor = myColor === 'w' ? 'b' : 'w';
 
         return (
-            <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '720px'}}>
+            <div className="d-flex flex-column align-items-center gap-3 w-100 position-relative" style={{ maxWidth: '720px'}}>
               {promotionMove && <PromotionChoice onPromote={handlePromotion} color={game.get(promotionMove.from)!.color} />}
               <PlayerInfoBar playerData={onlineGameState.players[opponentSymbol]} capturedColor={topPlayerCapturedColor} />
               {renderBoard()}
               <PlayerInfoBar playerData={onlineGameState.players[playerSymbol!]} capturedColor={bottomPlayerCapturedColor} />
               <p className={`mt-2 fs-5 fw-semibold ${game.game_over() || onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
+              
+              <InGameMessageDisplay
+                  messages={onlineGameState.chatMessages}
+                  players={onlineGameState.players}
+                  myPlayerSymbol={playerSymbol}
+              />
+              <ChatAndEmotePanel onSendMessage={sendChatMessage} disabled={!myTurn} />
+
               {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
             </div>
         );

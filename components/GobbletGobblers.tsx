@@ -8,6 +8,8 @@ import RulesModal from './RulesModal';
 import PlayerDisplay from './PlayerDisplay';
 import GameLobby from './GameLobby';
 import GameModeSelector from './GameModeSelector';
+import ChatAndEmotePanel from './ChatAndEmotePanel';
+import InGameMessageDisplay from './InGameMessageDisplay';
 
 // --- Global Declarations & Helpers ---
 declare const firebase: any;
@@ -64,12 +66,14 @@ const createInitialOnlineState = (playerName: string, deviceId: string, avatarUr
   createdAt: firebase.database.ServerValue.TIMESTAMP,
   rematch: { X: false, O: false },
   startingPlayer: 'X',
+  chatMessages: [],
 });
 
 const getRematchState = (): Partial<OnlineGameState> => ({
     board: createInitialBoard(),
     homePiles: createInitialPiles(),
     winningLine: [],
+    chatMessages: [],
 });
 
 const reconstructOnlineState = (gameData: any): OnlineGameState => {
@@ -112,6 +116,7 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
     winningLine: gameData.winningLine || [],
     players: gameData.players || { X: null, O: null },
     rematch: gameData.rematch || { X: false, O: false },
+    chatMessages: gameData.chatMessages || [],
   };
 };
 
@@ -148,6 +153,7 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
       handleRematch,
       changeGameMode,
       handleChangeProfileRequest,
+      sendChatMessage,
   } = useOnlineGame('gobblet-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
 
   // --- Game Logic ---
@@ -325,7 +331,7 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
     const canInteract = isOnline ? (isPlayerTurn && player === playerSymbol) : isPlayerTurn;
     
     return (
-     <div className={`d-flex flex-column align-items-center gap-2 ${isPlayerTurn ? 'border border-3 border-info' : ''} p-2 rounded-3`} style={{transition: 'border 0.3s ease', backgroundColor: '#212529'}}>
+     <div className={`d-flex flex-column align-items-center gap-2 ${isPlayerTurn ? 'border border-3 border-info' : ''} p-2 rounded-3 position-relative`} style={{transition: 'border 0.3s ease', backgroundColor: '#212529'}}>
         {isOnline ? (
             <PlayerDisplay player={playerInfo} />
         ) : (
@@ -390,9 +396,10 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
     const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
     const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
     const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
+    const isMyTurn = onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner;
     
     return (
-      <div className="d-flex flex-column align-items-center gap-4">
+      <div className="d-flex flex-column align-items-center gap-4 w-100 position-relative">
         <div className="text-center">
           <p className="text-muted mb-0">Room: {roomId}</p>
           <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
@@ -400,6 +407,12 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
         <HomePileComponent player={opponentSymbol} playerInfo={onlineGameState.players[opponentSymbol]} />
         {renderGameBoard(onlineGameState.board, onlineGameState.winningLine)}
         <HomePileComponent player={mySymbol} playerInfo={onlineGameState.players[mySymbol]} />
+        <InGameMessageDisplay
+            messages={onlineGameState.chatMessages}
+            players={onlineGameState.players}
+            myPlayerSymbol={playerSymbol}
+        />
+        <ChatAndEmotePanel onSendMessage={sendChatMessage} disabled={!isMyTurn} />
         {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-3 btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
       </div>
     );

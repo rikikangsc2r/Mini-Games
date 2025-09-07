@@ -33,6 +33,14 @@ export interface PlayerProfile {
     avatarUrl: string;
 }
 
+export interface ChatMessage {
+    senderSymbol: Player;
+    type: 'emote' | 'quickchat';
+    content: string;
+    timestamp: number;
+}
+
+
 export interface BaseOnlineGameState {
     players: {
         X: OnlinePlayer | null;
@@ -43,6 +51,7 @@ export interface BaseOnlineGameState {
     startingPlayer: Player;
     currentPlayer: Player;
     winner: Player | 'Draw' | null;
+    chatMessages: ChatMessage[];
 }
 
 export type GameMode = 'menu' | 'local' | 'online';
@@ -187,6 +196,23 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         db.ref(`${gameDbKey}/${roomId}/rematch/${playerSymbol}`).set(true);
     };
 
+    const sendChatMessage = useCallback((type: 'emote' | 'quickchat', content: string) => {
+        if (!roomId || !playerSymbol || !onlineGameState) return;
+
+        const newMessage: ChatMessage = {
+            senderSymbol: playerSymbol,
+            type,
+            content,
+            timestamp: Date.now(),
+        };
+
+        const currentMessages = onlineGameState.chatMessages || [];
+        const updatedMessages = [...currentMessages, newMessage].slice(-20); // Keep last 20 messages
+
+        db.ref(`${gameDbKey}/${roomId}/chatMessages`).set(updatedMessages);
+
+    }, [roomId, playerSymbol, onlineGameState, gameDbKey]);
+
     const handleChangeProfileRequest = useCallback(() => {
         playSound('back');
         setOnlineStep('profile');
@@ -239,6 +265,14 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
                     playSound('draw'); // Loss sound
                 }
             }
+            
+            // New message received from opponent
+            if (
+                onlineGameState.chatMessages.length > prevOnlineGameState.chatMessages.length &&
+                onlineGameState.chatMessages[onlineGameState.chatMessages.length - 1].senderSymbol !== playerSymbol
+            ) {
+                 playSound('notify');
+            }
         }
     }, [onlineGameState, prevOnlineGameState, onlineStep, playerSymbol, playSound, gameDbKey]);
 
@@ -257,5 +291,6 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         handleRematch,
         changeGameMode,
         handleChangeProfileRequest,
+        sendChatMessage,
     };
 };

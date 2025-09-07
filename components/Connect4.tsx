@@ -8,6 +8,8 @@ import RulesModal from './RulesModal';
 import PlayerDisplay from './PlayerDisplay';
 import GameLobby from './GameLobby';
 import GameModeSelector from './GameModeSelector';
+import ChatAndEmotePanel from './ChatAndEmotePanel';
+import InGameMessageDisplay from './InGameMessageDisplay';
 
 // --- Global Declarations ---
 declare const firebase: any;
@@ -42,11 +44,13 @@ const createInitialOnlineState = (playerName: string, deviceId: string, avatarUr
     createdAt: firebase.database.ServerValue.TIMESTAMP,
     rematch: { X: false, O: false },
     startingPlayer: 'X',
+    chatMessages: [],
 });
 
 const getRematchState = (): Partial<OnlineGameState> => ({
     board: createInitialBoard(),
     winningLine: [],
+    chatMessages: [],
 });
 
 const reconstructOnlineState = (gameData: any): OnlineGameState => {
@@ -73,6 +77,7 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
         winningLine: gameData.winningLine || [],
         players: gameData.players || { X: null, O: null },
         rematch: gameData.rematch || { X: false, O: false },
+        chatMessages: gameData.chatMessages || [],
     };
 };
 
@@ -85,7 +90,7 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu }) => {
     const {
         gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
         isLoading, error, roomInputRef, handleProfileSubmit, handleEnterRoom,
-        handleRematch, changeGameMode, handleChangeProfileRequest,
+        handleRematch, changeGameMode, handleChangeProfileRequest, sendChatMessage,
     } = useOnlineGame('connect4-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
 
     // Local game state
@@ -94,6 +99,7 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu }) => {
     const [winner, setWinner] = useState<Player | 'Draw' | null>(null);
     const [winningLine, setWinningLine] = useState<{ r: number; c: number }[]>([]);
     const [showRules, setShowRules] = useState(false);
+
 
     const checkWinner = useCallback((currentBoard: BoardState): WinningInfo | null => {
         // Horizontal
@@ -212,34 +218,89 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu }) => {
         winningLineToRender: { r: number, c: number }[],
         isTurn: boolean,
         isGameOver: boolean
-    ) => (
-        <div className="connect4-board">
-            {Array.from({ length: COLS }).map((_, c) => (
-                <div
-                    key={c}
-                    className={`connect4-col ${(!isTurn || isGameOver || boardToRender[0][c]) ? 'disabled' : ''}`}
-                    onClick={() => handleColumnClick(c)}
-                    role="button"
-                    aria-label={`Drop piece in column ${c + 1}`}
+    ) => {
+        const viewBoxWidth = COLS * 100;
+        const viewBoxHeight = ROWS * 100;
+        const cellPadding = 10;
+        const pieceRadius = (100 - cellPadding * 2) / 2;
+
+        const getCellCenter = (r: number, c: number) => ({
+            cx: c * 100 + 50,
+            cy: r * 100 + 50,
+        });
+
+        return (
+            <div className="connect4-container">
+                <svg
+                    className="connect4-svg"
+                    viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
+                    preserveAspectRatio="xMidYMid meet"
                 >
-                    {Array.from({ length: ROWS }).map((_, r) => {
-                        const piece = boardToRender[r][c];
-                        const isWinner = winningLineToRender.some(pos => pos.r === r && pos.c === c);
-                        return (
-                            <div key={r} className="connect4-cell">
-                                {piece && (
-                                    <div
-                                        className={`connect4-piece player-${piece} ${isWinner ? 'winner' : ''}`}
-                                        style={{ animationDelay: `${(ROWS - 1 - r) * 0.05}s` }}
-                                    />
-                                )}
-                            </div>
-                        );
-                    })}
+                    <defs>
+                        <radialGradient id="yellow-gradient" cx="40%" cy="40%" r="60%">
+                            <stop offset="0%" stopColor="#fff2a8" />
+                            <stop offset="30%" stopColor="#ffd700" />
+                            <stop offset="100%" stopColor="#ffc107" />
+                        </radialGradient>
+                        <radialGradient id="red-gradient" cx="40%" cy="40%" r="60%">
+                            <stop offset="0%" stopColor="#f08080" />
+                            <stop offset="30%" stopColor="#e74c3c" />
+                            <stop offset="100%" stopColor="#dc3545" />
+                        </radialGradient>
+                        <mask id="connect4-board-mask">
+                            <rect width={viewBoxWidth} height={viewBoxHeight} fill="white" />
+                            {Array.from({ length: ROWS * COLS }).map((_, i) => {
+                                const r = Math.floor(i / COLS);
+                                const c = i % COLS;
+                                const { cx, cy } = getCellCenter(r, c);
+                                return <circle key={`mask-${r}-${c}`} cx={cx} cy={cy} r={pieceRadius} fill="black" />;
+                            })}
+                        </mask>
+                    </defs>
+
+                    <rect
+                        className="connect4-board-frame"
+                        width={viewBoxWidth}
+                        height={viewBoxHeight}
+                        rx="30"
+                        mask="url(#connect4-board-mask)"
+                    />
+
+                    {boardToRender.map((row, r) =>
+                        row.map((piece, c) => {
+                            if (!piece) return null;
+                            const { cx, cy } = getCellCenter(r, c);
+                            const isWinner = winningLineToRender.some(pos => pos.r === r && pos.c === c);
+                            return (
+                                <circle
+                                    key={`piece-${r}-${c}`}
+                                    className={`connect4-piece player-${piece} ${isWinner ? 'winner' : ''}`}
+                                    cx={cx}
+                                    cy={cy}
+                                    r={pieceRadius}
+                                    style={{
+                                        animationDelay: `${(ROWS - 1 - r) * 0.05}s`
+                                    }}
+                                />
+                            );
+                        })
+                    )}
+                </svg>
+                
+                <div className="connect4-interactive-grid">
+                    {Array.from({ length: COLS }).map((_, c) => (
+                        <div
+                            key={`col-${c}`}
+                            className={`connect4-interactive-col ${(!isTurn || isGameOver || boardToRender[0][c]) ? 'disabled' : ''}`}
+                            onClick={() => handleColumnClick(c)}
+                            role="button"
+                            aria-label={`Jatuhkan bidak di kolom ${c + 1}`}
+                        />
+                    ))}
                 </div>
-            ))}
-        </div>
-    );
+            </div>
+        );
+    };
     
     const renderOnlineContent = () => {
         if (onlineStep !== 'game') {
@@ -248,20 +309,29 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu }) => {
         if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
         if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
 
+        const isMyTurn = onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner;
         const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
         const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
         return (
-            <div className="text-center">
+            <div className="text-center w-100 position-relative d-flex flex-column align-items-center">
                 <div className="mb-4 d-flex flex-column align-items-center gap-3">
-                     <div className="d-flex justify-content-center align-items-center gap-3 w-100" style={{maxWidth: '450px'}}>
+                     <div className="d-flex justify-content-center align-items-center gap-3 w-100 position-relative" style={{maxWidth: '450px'}}>
                         <PlayerDisplay player={onlineGameState.players.X} />
                         <span className="gradient-text fw-bolder fs-4">VS</span>
                         <PlayerDisplay player={onlineGameState.players.O} />
+                        <InGameMessageDisplay
+                            messages={onlineGameState.chatMessages}
+                            players={onlineGameState.players}
+                            myPlayerSymbol={playerSymbol}
+                        />
                     </div>
                     <p className="text-muted mb-0">Room: {roomId}</p>
                     <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
                 </div>
-                {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, onlineGameState.currentPlayer === playerSymbol, !!onlineGameState.winner)}
+                {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, isMyTurn, !!onlineGameState.winner)}
+                
+                <ChatAndEmotePanel onSendMessage={sendChatMessage} disabled={!isMyTurn} />
+
                 {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-4 btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
             </div>
         );

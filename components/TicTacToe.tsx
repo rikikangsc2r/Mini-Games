@@ -9,6 +9,8 @@ import RulesModal from './RulesModal';
 import PlayerDisplay from './PlayerDisplay';
 import GameLobby from './GameLobby';
 import GameModeSelector from './GameModeSelector';
+import ChatAndEmotePanel from './ChatAndEmotePanel';
+import InGameMessageDisplay from './InGameMessageDisplay';
 
 // Objek firebase global dari skrip di index.html
 declare const firebase: any;
@@ -32,11 +34,13 @@ const createInitialOnlineState = (playerName: string, deviceId: string, avatarUr
     createdAt: firebase.database.ServerValue.TIMESTAMP,
     rematch: { X: false, O: false },
     startingPlayer: 'X',
+    chatMessages: [],
 });
 
 const getRematchState = (): Partial<OnlineGameState> => ({
     board: Array(9).fill(null),
     winningLine: [],
+    chatMessages: [],
 });
 
 
@@ -56,6 +60,7 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
         winningLine: gameData.winningLine || [],
         players: gameData.players || { X: null, O: null },
         rematch: gameData.rematch || { X: false, O: false },
+        chatMessages: gameData.chatMessages || [],
     };
 };
 
@@ -80,6 +85,7 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu }) => {
       handleRematch,
       changeGameMode,
       handleChangeProfileRequest,
+      sendChatMessage,
   } = useOnlineGame('games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
   
   // State game lokal
@@ -198,20 +204,29 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu }) => {
       if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
       if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
 
+      const isMyTurn = onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner;
       const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
       const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
       return (
-          <div className="text-center">
+          <div className="text-center w-100 position-relative d-flex flex-column align-items-center">
               <div className="mb-4 d-flex flex-column align-items-center gap-3">
-                  <div className="d-flex justify-content-center align-items-center gap-3 w-100" style={{maxWidth: '450px'}}>
+                  <div className="d-flex justify-content-center align-items-center gap-3 w-100 position-relative" style={{maxWidth: '450px'}}>
                       <PlayerDisplay player={onlineGameState.players.X} />
                       <span className="gradient-text fw-bolder fs-4">VS</span>
                       <PlayerDisplay player={onlineGameState.players.O} />
+                      <InGameMessageDisplay
+                          messages={onlineGameState.chatMessages}
+                          players={onlineGameState.players}
+                          myPlayerSymbol={playerSymbol}
+                       />
                   </div>
                   <p className="text-muted mb-0">Room: {roomId}</p>
                   <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
               </div>
-              {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, handleOnlineClick, onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner)}
+              {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, handleOnlineClick, isMyTurn)}
+              
+              <ChatAndEmotePanel onSendMessage={sendChatMessage} disabled={!isMyTurn} />
+
               {onlineGameState.winner && (
                   <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-5 btn btn-primary btn-lg">
                         Rematch ({rematchCount}/2)

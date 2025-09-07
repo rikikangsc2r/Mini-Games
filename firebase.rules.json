@@ -2,7 +2,7 @@
   "rules": {
     // Apply a common set of security rules to all game types
     "$game_key": {
-      ".validate": "$game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'chess-games'",
+      ".validate": "$game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'chess-games' || $game_key === 'connect4-games'",
       
       "$room_id": {
         // Anyone can read a game's state. This is required for the "share room ID" feature to work.
@@ -70,10 +70,10 @@
 
         // --- Game-specific validations ---
         "board": {
-            ".validate": "($game_key === 'games' || $game_key === 'gobblet-games') ? newData.exists() && newData.hasChildren() : !newData.exists()"
+            ".validate": "($game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'connect4-games') ? newData.exists() && newData.hasChildren() : !newData.exists()"
         },
         "winningLine": {
-             ".validate": "($game_key === 'games' || $game_key === 'gobblet-games') ? !newData.exists() || newData.hasChildren() : !newData.exists()"
+             ".validate": "($game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'connect4-games') ? !newData.exists() || newData.hasChildren() : !newData.exists()"
         },
         "homePiles": {
             ".validate": "$game_key === 'gobblet-games' ? newData.exists() && newData.hasChildren(['X', 'O']) : !newData.exists()"

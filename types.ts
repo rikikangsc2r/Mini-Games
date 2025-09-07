@@ -1,2 +1,2 @@
 export type Player = 'X' | 'O';
-export type GameID = 'menu' | 'tictactoe' | 'gobblet' | 'chess';
+export type GameID = 'menu' | 'tictactoe' | 'gobblet' | 'chess' | 'connect4';

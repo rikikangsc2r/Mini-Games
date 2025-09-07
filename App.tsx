@@ -6,6 +6,7 @@ import GobbletGobblers from './components/GobbletGobblers';
 import Chess from './components/Chess';
 import Header from './components/Header';
 import useSounds from './components/useSounds';
+import Connect4 from './components/Connect4';
 
 const TicTacToeIcon = () => (
   <svg viewBox="0 0 100 100" style={{ width: '100%', height: 'auto', padding: '1rem', maxHeight: '150px' }}>
@@ -42,6 +43,30 @@ const ChessIcon = () => (
   </svg>
 );
 
+const Connect4Icon = () => (
+    <svg viewBox="0 0 70 60" style={{ width: '100%', height: 'auto', padding: '1rem', maxHeight: '150px' }}>
+      <defs>
+        <mask id="connect4-mask">
+          <rect width="70" height="60" fill="white"/>
+          {[...Array(6)].map((_, r) =>
+            [...Array(7)].map((_, c) =>
+              <circle key={`${r}-${c}`} cx={5 + c * 10} cy={5 + r * 10} r="4.5" fill="black"/>
+            )
+          )}
+        </mask>
+      </defs>
+      <rect width="70" height="60" rx="5" fill="#0d6efd"/>
+      <rect width="70" height="60" rx="5" fill="#212529" mask="url(#connect4-mask)"/>
+      <circle cx="15" cy="55" r="4.5" fill="#ffc107"/>
+      <circle cx="25" cy="55" r="4.5" fill="#ffc107"/>
+      <circle cx="35" cy="45" r="4.5" fill="#ffc107"/>
+      <circle cx="45" cy="35" r="4.5" fill="#ffc107"/>
+      <circle cx="25" cy="45" r="4.5" fill="#dc3545"/>
+      <circle cx="35" cy="55" r="4.5" fill="#dc3545"/>
+      <circle cx="45" cy="45" r="4.5" fill="#dc3545"/>
+    </svg>
+);
+
 
 const App: React.FC = () => {
   const [currentGame, setCurrentGame] = useState<GameID>('menu');
@@ -65,6 +90,8 @@ const App: React.FC = () => {
         return <GobbletGobblers onBack={backToMenu} />;
       case 'chess':
         return <Chess onBack={backToMenu} />;
+      case 'connect4':
+        return <Connect4 onBack={backToMenu} />;
       default:
         return null;
     }
@@ -76,7 +103,7 @@ const App: React.FC = () => {
       <main className="container mt-5">
         {currentGame === 'menu' ? (
           <div className="row g-4 justify-content-center">
-            <div className="col-12 col-md-6 col-lg-4">
+            <div className="col-12 col-md-6 col-lg-6">
               <GameCard
                 title="Tic-Tac-Toe"
                 description="Permainan klasik X dan O. Tantang teman dalam duel dua pemain yang sederhana namun strategis ini."
@@ -84,7 +111,7 @@ const App: React.FC = () => {
                 onClick={() => selectGame('tictactoe')}
               />
             </div>
-            <div className="col-12 col-md-6 col-lg-4">
+            <div className="col-12 col-md-6 col-lg-6">
               <GameCard
                 title="Gobblet Gobblers"
                 description="Sentuhan cerdas pada Tic-Tac-Toe. Makan jalanmu menuju kemenangan dalam permainan dua pemain yang seru ini!"
@@ -92,12 +119,20 @@ const App: React.FC = () => {
                 onClick={() => selectGame('gobblet')}
               />
             </div>
-            <div className="col-12 col-md-6 col-lg-4">
+            <div className="col-12 col-md-6 col-lg-6">
               <GameCard
                 title="Catur"
                 description="Permainan strategi terbaik. Uji kecerdasan Anda melawan lawan dalam pertarungan abadi yang mengasah otak."
                 svgIcon={<ChessIcon />}
                 onClick={() => selectGame('chess')}
+              />
+            </div>
+            <div className="col-12 col-md-6 col-lg-6">
+              <GameCard
+                title="Connect 4"
+                description="Jatuhkan cakram Anda dan jadilah yang pertama mendapatkan empat cakram berturut-turut. Bisakah Anda mengakali lawan?"
+                svgIcon={<Connect4Icon />}
+                onClick={() => selectGame('connect4')}
               />
             </div>
           </div>

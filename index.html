@@ -179,6 +179,64 @@
         transform: scale(1.1);
         background-color: #adb5bd;
       }
+
+      /* Connect 4 Styles */
+      .connect4-board {
+        display: flex;
+        background-color: #0d6efd;
+        padding: clamp(5px, 2vw, 10px);
+        border-radius: clamp(5px, 2vw, 10px);
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        border: clamp(2px, 1vw, 4px) solid #0a58ca;
+        gap: clamp(3px, 1.5vw, 8px);
+      }
+      .connect4-col {
+        display: flex;
+        flex-direction: column;
+        gap: clamp(3px, 1.5vw, 8px);
+        cursor: pointer;
+        border-radius: 8px;
+        transition: background-color 0.2s ease;
+      }
+      .connect4-col:not(.disabled):hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+      .connect4-col.disabled {
+        cursor: not-allowed;
+      }
+      .connect4-cell {
+        width: clamp(35px, 10vw, 50px);
+        height: clamp(35px, 10vw, 50px);
+        background-color: #212529;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        box-shadow: inset 2px 2px 5px rgba(0,0,0,0.5);
+        position: relative;
+      }
+      .connect4-piece {
+        width: 85%;
+        height: 85%;
+        border-radius: 50%;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.4), inset 1px 1px 3px rgba(255,255,255,0.3);
+        transform: translateY(-300px);
+        animation: drop-in 0.4s cubic-bezier(0.5, 0, 0.25, 1.5) forwards;
+        position: absolute;
+      }
+      .connect4-piece.player-X { background: radial-gradient(circle at 35% 35%, #ffd700, #ffc107); } /* Yellow */
+      .connect4-piece.player-O { background: radial-gradient(circle at 35% 35%, #e74c3c, #dc3545); } /* Red */
+      .connect4-piece.winner {
+        border: 3px solid #198754;
+        box-shadow: 0 0 15px #20c997;
+        transform: scale(1.1);
+        z-index: 10;
+      }
+
+      @keyframes drop-in {
+        from { transform: translateY(-300px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
     </style>
   <script type="importmap">
 {

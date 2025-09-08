@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Player } from '../types';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
@@ -17,6 +17,14 @@ declare const firebase: any;
 const db = firebase.database();
 const ROWS = 6;
 const COLS = 7;
+
+function usePrevious<T>(value: T): T | undefined {
+    const ref = useRef<T | undefined>(undefined);
+    useEffect(() => {
+        ref.current = value;
+    }, [value]);
+    return ref.current;
+}
 
 // --- Type Definitions ---
 type BoardState = (Player | null)[][];
@@ -95,6 +103,8 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
         handleRematch, changeGameMode, handleChangeProfileRequest, sendChatMessage,
     } = useOnlineGame('connect4-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
 
+    const prevOnlineGameState = usePrevious(onlineGameState);
+
     // Local & AI game state
     const [board, setBoard] = useState<BoardState>(createInitialBoard);
     const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
@@ -103,6 +113,20 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
     const [showRules, setShowRules] = useState(false);
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [aiStarts, setAiStarts] = useState(false);
+
+    // Efek untuk suara game online
+    useEffect(() => {
+        if (gameMode !== 'online' || !onlineGameState || !prevOnlineGameState || !playerSymbol) return;
+
+        // Lawan bergerak (sekarang giliran saya)
+        if (
+            onlineGameState.currentPlayer === playerSymbol &&
+            prevOnlineGameState.currentPlayer !== playerSymbol &&
+            !onlineGameState.winner
+        ) {
+            playSound('place');
+        }
+    }, [onlineGameState, prevOnlineGameState, gameMode, playerSymbol, playSound]);
 
 
     const checkWinner = useCallback((currentBoard: BoardState): WinningInfo | null => {

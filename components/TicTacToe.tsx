@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Player } from '../types';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
@@ -16,6 +16,14 @@ import OnlineGameWrapper from './OnlineGameWrapper';
 // Objek firebase global dari skrip di index.html
 declare const firebase: any;
 const db = firebase.database();
+
+function usePrevious<T>(value: T): T | undefined {
+    const ref = useRef<T | undefined>(undefined);
+    useEffect(() => {
+        ref.current = value;
+    }, [value]);
+    return ref.current;
+}
 
 interface OnlineGameState extends BaseOnlineGameState {
     board: (Player | null)[];
@@ -90,6 +98,8 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
       sendChatMessage,
   } = useOnlineGame('games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
   
+  const prevOnlineGameState = usePrevious(onlineGameState);
+  
   // State game lokal & AI
   const [board, setBoard] = useState<(Player | null)[]>(Array(9).fill(null));
   const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
@@ -98,6 +108,20 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
   const [showRules, setShowRules] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [aiStarts, setAiStarts] = useState(false);
+
+  // Efek untuk suara game online
+  useEffect(() => {
+    if (gameMode !== 'online' || !onlineGameState || !prevOnlineGameState || !playerSymbol) return;
+
+    // Lawan bergerak (sekarang giliran saya)
+    if (
+        onlineGameState.currentPlayer === playerSymbol &&
+        prevOnlineGameState.currentPlayer !== playerSymbol &&
+        !onlineGameState.winner
+    ) {
+        playSound('place');
+    }
+  }, [onlineGameState, prevOnlineGameState, gameMode, playerSymbol, playSound]);
 
   const calculateWinner = useCallback((squares: (Player | null)[]): { winner: Player | 'Draw', line: number[] } | null => {
     const lines = [

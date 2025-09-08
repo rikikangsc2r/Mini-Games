@@ -105,6 +105,17 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         }
     }, []);
     
+    // Efek ini memastikan playerSymbol selalu benar, bahkan setelah pertukaran pemain saat rematch.
+    useEffect(() => {
+        if (onlineGameState?.players) {
+            if (onlineGameState.players.X?.deviceId === deviceId.current) {
+                setPlayerSymbol('X');
+            } else if (onlineGameState.players.O?.deviceId === deviceId.current) {
+                setPlayerSymbol('O');
+            }
+        }
+    }, [onlineGameState?.players]);
+    
     const handleProfileSubmit = (name: string, avatarUrl: string) => {
         const profile = { name, avatarUrl };
         playSound('select');
@@ -174,13 +185,19 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         }
     }, [playerProfile, playSound, gameDbKey, createInitialGameState]);
     
-    // Abstracted rematch logic
+    // Logika rematch yang diabstraksikan
     useEffect(() => {
         if (gameMode === 'online' && onlineGameState?.rematch.X && onlineGameState?.rematch.O) {
             const roomRef = db.ref(`${gameDbKey}/${roomId}`);
+            
             const newStartingPlayer = onlineGameState.startingPlayer === 'X' ? 'O' : 'X';
             
+            // Tukar pemain
+            const playerX = onlineGameState.players.X;
+            const playerO = onlineGameState.players.O;
+            
             const commonResetState = {
+                players: { X: playerO, O: playerX }, // Pemain ditukar
                 currentPlayer: newStartingPlayer,
                 winner: null,
                 rematch: { X: false, O: false },
@@ -218,7 +235,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         };
 
         const currentMessages = onlineGameState.chatMessages || [];
-        const updatedMessages = [...currentMessages, newMessage].slice(-20); // Keep last 20 messages
+        const updatedMessages = [...currentMessages, newMessage].slice(-20); // Simpan 20 pesan terakhir
 
         db.ref(`${gameDbKey}/${roomId}/chatMessages`).set(updatedMessages);
 
@@ -250,12 +267,12 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
     
     useEffect(() => {
         if (onlineStep === 'game' && onlineGameState && prevOnlineGameState) {
-            // Opponent joined
+            // Lawan bergabung
             if (!prevOnlineGameState.players.O && onlineGameState.players.O) {
                 playSound('notify');
             }
             
-            // Game ended - play win/loss/draw sound
+            // Game berakhir - putar suara menang/kalah/seri
             if (!prevOnlineGameState.winner && onlineGameState.winner) {
                 const gameId = dbKeyToGameId(gameDbKey);
                 if (onlineGameState.winner === 'Draw') {
@@ -265,12 +282,12 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
                     playSound('win');
                     if (gameId) recordGame(gameId, 'win');
                 } else {
-                    playSound('draw'); // Loss sound is same as draw
+                    playSound('draw'); // Suara kalah sama dengan seri
                     if (gameId) recordGame(gameId, 'loss');
                 }
             }
             
-            // New message received from opponent
+            // Pesan baru diterima dari lawan
             if (
                 (onlineGameState.chatMessages?.length || 0) > (prevOnlineGameState.chatMessages?.length || 0) &&
                 onlineGameState.chatMessages[onlineGameState.chatMessages.length - 1].senderSymbol !== playerSymbol

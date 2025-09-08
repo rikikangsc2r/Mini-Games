@@ -66,9 +66,10 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
 
 interface TicTacToeProps {
   onBackToMenu: () => void;
+  description: string;
 }
 
-const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu }) => {
+const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
   const playSound = useSounds();
   const {
       gameMode,
@@ -210,7 +211,7 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu }) => {
       return (
           <div className="text-center w-100 position-relative d-flex flex-column align-items-center">
               <div className="mb-4 d-flex flex-column align-items-center gap-3">
-                  <div className="d-flex justify-content-center align-items-center gap-3 w-100 position-relative" style={{maxWidth: '450px'}}>
+                  <div className="d-flex justify-content-center align-items-center gap-3 w-100 position-relative player-display-container-responsive" style={{maxWidth: '450px'}}>
                       <PlayerDisplay player={onlineGameState.players.X} />
                       <span className="gradient-text fw-bolder fs-4">VS</span>
                       <PlayerDisplay player={onlineGameState.players.O} />
@@ -239,7 +240,7 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu }) => {
   const renderContent = () => {
     switch(gameMode) {
       case 'menu':
-        return <GameModeSelector title="Tic-Tac-Toe" changeGameMode={changeGameMode} />;
+        return <GameModeSelector title="Tic-Tac-Toe" description={description} changeGameMode={changeGameMode} />;
       case 'local':
         return (
           <div className="text-center">

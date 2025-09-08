@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Player } from '../types';
 import useSounds from '../components/useSounds';
+import { usePlayerStats, GameStatsID } from './usePlayerStats';
 
 declare const firebase: any;
 const db = firebase.database();
@@ -57,6 +58,16 @@ export interface BaseOnlineGameState {
 export type GameMode = 'menu' | 'local' | 'online';
 export type OnlineStep = 'profile' | 'room' | 'game';
 
+const dbKeyToGameId = (dbKey: string): GameStatsID | null => {
+    switch (dbKey) {
+        case 'games': return 'tictactoe';
+        case 'gobblet-games': return 'gobblet';
+        case 'chess-games': return 'chess';
+        case 'connect4-games': return 'connect4';
+        default: return null;
+    }
+};
+
 export const useOnlineGame = <T extends BaseOnlineGameState>(
     gameDbKey: string,
     createInitialGameState: (playerName: string, deviceId: string, avatarUrl: string) => T,
@@ -67,6 +78,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
     const [gameMode, setGameMode] = useState<GameMode>('menu');
     const [onlineStep, setOnlineStep] = useState<OnlineStep>('profile');
     const playSound = useSounds();
+    const { recordGame } = usePlayerStats();
     
     const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
     const [roomId, setRoomId] = useState('');
@@ -257,12 +269,16 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
 
             // Game ended
             if (!prevOnlineGameState.winner && onlineGameState.winner) {
+                const gameId = dbKeyToGameId(gameDbKey);
                 if (onlineGameState.winner === 'Draw') {
                     playSound('draw');
+                    if (gameId) recordGame(gameId, 'draw');
                 } else if (onlineGameState.winner === playerSymbol) {
                     playSound('win');
+                    if (gameId) recordGame(gameId, 'win');
                 } else {
                     playSound('draw'); // Loss sound
+                    if (gameId) recordGame(gameId, 'loss');
                 }
             }
             
@@ -274,7 +290,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
                  playSound('notify');
             }
         }
-    }, [onlineGameState, prevOnlineGameState, onlineStep, playerSymbol, playSound, gameDbKey]);
+    }, [onlineGameState, prevOnlineGameState, onlineStep, playerSymbol, playSound, gameDbKey, recordGame]);
 
     return {
         gameMode,

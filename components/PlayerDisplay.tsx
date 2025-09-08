@@ -18,7 +18,7 @@ const PlayerDisplay: React.FC<PlayerDisplayProps> = ({ player }) => {
     return (
         <div className="d-flex align-items-center gap-2 text-decoration-none">
             <img src={player.avatarUrl} alt={player.name} className="player-avatar" />
-            <span className="fw-bold text-light" style={{ fontSize: '1.1rem' }}>{player.name}</span>
+            <span className="fw-bold text-light player-display-name">{player.name}</span>
         </div>
     );
 };

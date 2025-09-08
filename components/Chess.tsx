@@ -118,9 +118,10 @@ const SquareComponent: React.FC<SquareProps> = React.memo(({
 
 interface ChessProps {
   onBackToMenu: () => void;
+  description: string;
 }
 
-const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
+const Chess: React.FC<ChessProps> = ({ onBackToMenu, description }) => {
     // --- State ---
     const [game, setGame] = useState(() => new ChessJS());
     const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
@@ -421,7 +422,7 @@ const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
         const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
 
         const PlayerInfoBar: React.FC<{playerData: OnlinePlayer | null, capturedColor: PieceColor}> = ({playerData, capturedColor}) => (
-           <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center position-relative">
+           <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center position-relative chess-player-bar">
                 <PlayerDisplay player={playerData} />
                 <CapturedPiecesDisplay pieces={capturedPieces[capturedColor]} />
            </div>
@@ -454,17 +455,17 @@ const Chess: React.FC<ChessProps> = ({ onBackToMenu }) => {
     const renderContent = () => {
         switch (gameMode) {
             case 'menu':
-                return <GameModeSelector title="Catur" changeGameMode={changeGameMode} />;
+                return <GameModeSelector title="Catur" description={description} changeGameMode={changeGameMode} />;
             case 'local':
                 return (
                     <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '720px'}}>
                         {promotionMove && <PromotionChoice onPromote={handlePromotion} color={game.get(promotionMove.from)!.color} />}
-                        <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center">
+                        <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center chess-player-bar">
                           <p className="m-0 fw-bold text-start">Pion Hitam (Tertangkap)</p>
                           <CapturedPiecesDisplay pieces={capturedPieces.b} />
                         </div>
                         {renderBoard()}
-                        <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center">
+                        <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center chess-player-bar">
                            <p className="m-0 fw-bold text-start">Pion Putih (Tertangkap)</p>
                            <CapturedPiecesDisplay pieces={capturedPieces.w} />
                         </div>

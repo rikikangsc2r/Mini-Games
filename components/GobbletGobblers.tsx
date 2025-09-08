@@ -122,9 +122,10 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
 
 interface GobbletGobblersProps {
   onBackToMenu: () => void;
+  description: string;
 }
 
-const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
+const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu, description }) => {
   // --- State ---
   const [selection, setSelection] = useState<Selection | null>(null);
   const playSound = useSounds();
@@ -337,15 +338,15 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
         ) : (
             <span className="fw-bold text-light">Pemain {player}</span>
         )}
-        <div className="d-flex justify-content-center gap-3 p-2 bg-secondary rounded-3 shadow">
+        <div className="d-flex justify-content-center gap-3 p-2 bg-secondary rounded-3 shadow gg-home-piles-container">
             {piles[player].map((pile, pileIndex) => {
               const isSelected = selection?.from === 'home' && selection.homePileIndex === pileIndex && selection.piece.player === player;
               const topPiece = pile.length > 0 ? pile[pile.length - 1] : null;
               return (
                 <div
                   key={pileIndex}
-                  className="rounded-3 position-relative"
-                  style={{ width: '90px', height: '90px', backgroundColor: '#343a40', cursor: topPiece && canInteract ? 'pointer' : 'default'}}
+                  className="rounded-3 position-relative gg-home-pile-cell"
+                  style={{ backgroundColor: '#343a40', cursor: topPiece && canInteract ? 'pointer' : 'default'}}
                   onClick={() => canInteract && handleHomePieceClick(player, pileIndex)}
                 >
                   {pile.map((piece, i) => (
@@ -421,7 +422,7 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu }) => {
   const renderContent = () => {
     switch(gameMode) {
       case 'menu':
-        return <GameModeSelector title="Gobblet Gobblers" changeGameMode={changeGameMode} />;
+        return <GameModeSelector title="Gobblet Gobblers" description={description} changeGameMode={changeGameMode} />;
       case 'local':
         return (
           <div className="d-flex flex-column align-items-center gap-4">

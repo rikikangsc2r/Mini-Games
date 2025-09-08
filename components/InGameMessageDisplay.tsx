@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import type { Player } from '../types';
 import { OnlinePlayer, ChatMessage } from '../hooks/useOnlineGame';
 
@@ -9,17 +9,7 @@ interface InGameMessageDisplayProps {
 }
 
 const InGameMessageDisplay: React.FC<InGameMessageDisplayProps> = ({ messages, players, myPlayerSymbol }) => {
-    const [latestMessage, setLatestMessage] = useState<ChatMessage | null>(null);
-
-    useEffect(() => {
-        if (messages.length > 0) {
-            const lastMsg = messages[messages.length - 1];
-            // Hanya perbarui jika timestamp-nya baru untuk mencegah re-render yang tidak perlu
-            if (lastMsg.timestamp !== latestMessage?.timestamp) {
-                 setLatestMessage(lastMsg);
-            }
-        }
-    }, [messages]); // Hanya bergantung pada array pesan
+    const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null;
 
     if (!latestMessage) {
         return null;

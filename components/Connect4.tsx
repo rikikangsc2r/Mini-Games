@@ -83,9 +83,10 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
 
 interface Connect4Props {
     onBackToMenu: () => void;
+    description: string;
 }
 
-const Connect4: React.FC<Connect4Props> = ({ onBackToMenu }) => {
+const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
     const playSound = useSounds();
     const {
         gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
@@ -315,7 +316,7 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu }) => {
         return (
             <div className="text-center w-100 position-relative d-flex flex-column align-items-center">
                 <div className="mb-4 d-flex flex-column align-items-center gap-3">
-                     <div className="d-flex justify-content-center align-items-center gap-3 w-100 position-relative" style={{maxWidth: '450px'}}>
+                     <div className="d-flex justify-content-center align-items-center gap-3 w-100 position-relative player-display-container-responsive" style={{maxWidth: '450px'}}>
                         <PlayerDisplay player={onlineGameState.players.X} />
                         <span className="gradient-text fw-bolder fs-4">VS</span>
                         <PlayerDisplay player={onlineGameState.players.O} />
@@ -340,7 +341,7 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu }) => {
     const renderContent = () => {
         switch(gameMode) {
             case 'menu':
-                return <GameModeSelector title="Connect 4" changeGameMode={changeGameMode} />;
+                return <GameModeSelector title="Connect 4" description={description} changeGameMode={changeGameMode} />;
             case 'local':
                 return (
                     <div className="text-center">

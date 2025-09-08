@@ -1,17 +1,23 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { GameID } from './types';
-import GameCard from './components/GameCard';
-import Header from './components/Header';
 import useSounds from './components/useSounds';
 
-// Impor langsung komponen game untuk fungsionalitas offline
+// Impor komponen baru
+import Navbar from './components/Navbar';
+import GameIcon from './components/GameIcon';
+
+// Impor komponen game dan halaman
 import TicTacToe from './components/TicTacToe';
 import GobbletGobblers from './components/GobbletGobblers';
 import Chess from './components/Chess';
 import Connect4 from './components/Connect4';
+import Footer from './components/Footer';
+import Blog from './components/Blog';
+import PlayerStats from './components/PlayerStats';
 
+// Ikon-ikon Game
 const TicTacToeIcon = () => (
-  <svg viewBox="0 0 100 100" style={{ width: '100%', height: 'auto', padding: '1rem', maxHeight: '150px' }}>
+  <svg viewBox="0 0 100 100">
     <path d="M33,5 V95 M67,5 V95 M5,33 H95 M5,67 H95" stroke="#495057" strokeWidth="8" />
     <path d="M10,10 L30,30 M10,30 L30,10" stroke="#0dcaf0" strokeWidth="10" strokeLinecap="round" />
     <circle cx="50" cy="50" r="10" stroke="#ffc107" strokeWidth="10" fill="none" />
@@ -19,7 +25,7 @@ const TicTacToeIcon = () => (
 );
 
 const GobbletIcon = () => (
-  <svg viewBox="0 0 100 100" style={{ width: '100%', height: 'auto', padding: '1rem', maxHeight: '150px' }}>
+  <svg viewBox="0 0 100 100">
      <g stroke="#343a40" strokeWidth="2">
       <circle cx="45" cy="55" r="35" fill="#0dcaf0" opacity="0.3" />
       <circle cx="45" cy="55" r="28" fill="#0dcaf0" opacity="0.6" />
@@ -32,7 +38,7 @@ const GobbletIcon = () => (
 );
 
 const ChessIcon = () => (
-  <svg viewBox="0 0 48 48" style={{ width: '100%', height: 'auto', padding: '1rem', maxHeight: '150px' }}>
+  <svg viewBox="0 0 48 48">
     <g stroke="#212529" strokeWidth="0.5">
       <path fill="#689f38" d="M28.001,19h-8.002c0,16.944-10,9.713-10,23c0,0,0.546,2,14.001,2c13.455,0,14.001-2,14.001-2 C38.001,28.713,28.001,35.944,28.001,19z"></path>
       <path fill="#33691e" d="M28.001,19h-8.002c0,1.127-0.047,2.141-0.13,3.067c1.869,0.18,5.76,0.63,5.76,3.765 C25.629,28.534,23.891,37.51,19,38c-4.461,0.447-8.273-1.094-8.273-1.094C10.272,38.18,9.999,39.81,9.999,42c0,0,0.546,2,14.001,2 c13.455,0,14.001-2,14.001-2C38.001,28.713,28.001,35.944,28.001,19z"></path>
@@ -46,7 +52,7 @@ const ChessIcon = () => (
 );
 
 const Connect4Icon = () => (
-    <svg viewBox="0 0 70 60" style={{ width: '100%', height: 'auto', padding: '1rem', maxHeight: '150px' }}>
+    <svg viewBox="0 0 70 60">
       <defs>
         <mask id="connect4-mask">
           <rect width="70" height="60" fill="white"/>
@@ -71,96 +77,136 @@ const Connect4Icon = () => (
 
 const App: React.FC = () => {
   const [currentGame, setCurrentGame] = useState<GameID>('menu');
+  const [searchQuery, setSearchQuery] = useState('');
+  const scrollPositionRef = useRef(0);
   const playSound = useSounds();
   
-  const handleSelectGame = (gameId: GameID) => {
+  const handleSelectGame = useCallback((gameId: GameID) => {
+    if (currentGame === 'menu') {
+        scrollPositionRef.current = window.scrollY;
+    }
     playSound('select');
     setCurrentGame(gameId);
-  };
+  }, [currentGame, playSound]);
   
-  const handleBackToMenu = () => {
+  const handleBackToMenu = useCallback(() => {
       playSound('back');
       setCurrentGame('menu');
-  };
+  }, [playSound]);
 
-  // SEO: Dynamically update page title
   useEffect(() => {
-    switch (currentGame) {
-      case 'tictactoe':
-        document.title = 'Tic-Tac-Toe Multiplayer | NkGame';
-        break;
-      case 'gobblet':
-        document.title = 'Gobblet Gobblers Multiplayer | NkGame';
-        break;
-      case 'chess':
-        document.title = 'Catur (Chess) Multiplayer | NkGame';
-        break;
-      case 'connect4':
-        document.title = 'Connect 4 Multiplayer | NkGame';
-        break;
-      default:
-        document.title = 'NkGame - Koleksi Game Papan Online Multiplayer';
+    if (currentGame === 'menu') {
+        const timer = setTimeout(() => {
+            window.scrollTo({ top: scrollPositionRef.current, behavior: 'auto' });
+        }, 0);
+        return () => clearTimeout(timer);
+    } else {
+        window.scrollTo({ top: 0, behavior: 'auto' });
     }
   }, [currentGame]);
 
+  useEffect(() => {
+    switch (currentGame) {
+      case 'tictactoe': document.title = 'Tic-Tac-Toe Multiplayer | NkGame'; break;
+      case 'gobblet': document.title = 'Gobblet Gobblers Multiplayer | NkGame'; break;
+      case 'chess': document.title = 'Catur (Chess) Multiplayer | NkGame'; break;
+      case 'connect4': document.title = 'Connect 4 Multiplayer | NkGame'; break;
+      case 'stats': document.title = 'Statistik Pemain | NkGame'; break;
+      case 'blog': document.title = 'Blog | NkGame'; break;
+      default: document.title = 'NkGame - Koleksi Game Papan Online Multiplayer';
+    }
+  }, [currentGame]);
+
+  const gamesList = [
+    {
+        id: 'tictactoe' as GameID,
+        title: "Tic-Tac-Toe",
+        description: "Permainan klasik X dan O. Tantang teman dalam duel dua pemain yang sederhana namun strategis ini.",
+        icon: <TicTacToeIcon />,
+    },
+    {
+        id: 'gobblet' as GameID,
+        title: "Gobblet Gobblers",
+        description: "Sentuhan cerdas pada Tic-Tac-Toe. Makan jalanmu menuju kemenangan dalam permainan dua pemain yang seru ini!",
+        icon: <GobbletIcon />,
+    },
+    {
+        id: 'chess' as GameID,
+        title: "Catur",
+        description: "Permainan strategi terbaik. Uji kecerdasan Anda melawan lawan dalam pertarungan abadi yang mengasah otak.",
+        icon: <ChessIcon />,
+    },
+    {
+        id: 'connect4' as GameID,
+        title: "Connect 4",
+        description: "Jatuhkan cakram Anda dan jadilah yang pertama mendapatkan empat cakram berturut-turut. Bisakah Anda mengakali lawan?",
+        icon: <Connect4Icon />,
+    },
+  ];
+
+  const filteredGames = gamesList.filter(game =>
+    game.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const getGameDescription = (gameId: GameID) => {
+      const game = gamesList.find(g => g.id === gameId);
+      return game ? game.description : '';
+  };
+
   const renderGame = () => {
     switch (currentGame) {
-      case 'tictactoe':
-        return <TicTacToe onBackToMenu={handleBackToMenu} />;
-      case 'gobblet':
-        return <GobbletGobblers onBackToMenu={handleBackToMenu} />;
-      case 'chess':
-        return <Chess onBackToMenu={handleBackToMenu} />;
-      case 'connect4':
-        return <Connect4 onBackToMenu={handleBackToMenu} />;
-      default:
-        return null;
+      case 'tictactoe': return <TicTacToe onBackToMenu={handleBackToMenu} description={getGameDescription('tictactoe')} />;
+      case 'gobblet': return <GobbletGobblers onBackToMenu={handleBackToMenu} description={getGameDescription('gobblet')} />;
+      case 'chess': return <Chess onBackToMenu={handleBackToMenu} description={getGameDescription('chess')} />;
+      case 'connect4': return <Connect4 onBackToMenu={handleBackToMenu} description={getGameDescription('connect4')} />;
+      case 'stats': return <PlayerStats onBackToMenu={handleBackToMenu} />;
+      case 'blog': return <Blog onBackToMenu={handleBackToMenu} />;
+      default: return null;
     }
   };
 
+  const renderContent = () => {
+      if (currentGame === 'menu') {
+          return (
+              <>
+                <div className="text-center mb-5">
+                  <h1 className="display-4 fw-bolder text-white">Pilih Game</h1>
+                  <p className="fs-5 text-muted">Koleksi Game Klasik, Kesenangan Modern</p>
+                </div>
+                <div className="game-icon-grid">
+                  {filteredGames.length > 0 ? filteredGames.map(game => (
+                      <GameIcon
+                          key={game.id}
+                          title={game.title}
+                          svgIcon={game.icon}
+                          onClick={() => handleSelectGame(game.id)}
+                      />
+                  )) : (
+                      <div className="text-center text-muted mt-4" style={{gridColumn: '1 / -1'}}>
+                          <p className="fs-4">Tidak ada yang ditemukan.</p>
+                          <p>Coba kata kunci pencarian yang berbeda.</p>
+                      </div>
+                  )}
+                </div>
+              </>
+          );
+      }
+      return renderGame();
+  };
+
+
   return (
-    <div className="min-vh-100 p-3 p-sm-4 p-md-5">
-      <Header />
-      <main className="container-fluid px-md-5 mt-5">
-        {currentGame === 'menu' ? (
-          <div className="row g-4 justify-content-center">
-            <div className="col-12 col-md-6 col-lg-6">
-              <GameCard
-                title="Tic-Tac-Toe"
-                description="Permainan klasik X dan O. Tantang teman dalam duel dua pemain yang sederhana namun strategis ini."
-                svgIcon={<TicTacToeIcon />}
-                onClick={() => handleSelectGame('tictactoe')}
-              />
-            </div>
-            <div className="col-12 col-md-6 col-lg-6">
-              <GameCard
-                title="Gobblet Gobblers"
-                description="Sentuhan cerdas pada Tic-Tac-Toe. Makan jalanmu menuju kemenangan dalam permainan dua pemain yang seru ini!"
-                svgIcon={<GobbletIcon />}
-                onClick={() => handleSelectGame('gobblet')}
-              />
-            </div>
-            <div className="col-12 col-md-6 col-lg-6">
-              <GameCard
-                title="Catur"
-                description="Permainan strategi terbaik. Uji kecerdasan Anda melawan lawan dalam pertarungan abadi yang mengasah otak."
-                svgIcon={<ChessIcon />}
-                onClick={() => handleSelectGame('chess')}
-              />
-            </div>
-            <div className="col-12 col-md-6 col-lg-6">
-              <GameCard
-                title="Connect 4"
-                description="Jatuhkan cakram Anda dan jadilah yang pertama mendapatkan empat cakram berturut-turut. Bisakah Anda mengakali lawan?"
-                svgIcon={<Connect4Icon />}
-                onClick={() => handleSelectGame('connect4')}
-              />
-            </div>
-          </div>
-        ) : (
-          renderGame()
-        )}
+    <div className="d-flex flex-column min-vh-100">
+      <Navbar 
+        activeView={currentGame}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onNavigate={handleSelectGame}
+      />
+      <main className="container-fluid px-3 px-md-5 mt-4 flex-grow-1">
+        {renderContent()}
       </main>
+      <Footer />
     </div>
   );
 };

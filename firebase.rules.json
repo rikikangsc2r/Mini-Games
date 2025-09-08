@@ -103,7 +103,7 @@
             ".validate": "$game_key === 'chess-games' ? newData.exists() && newData.isString() : !newData.exists()"
         },
         "lastMove": {
-             ".validate": "$game_key === 'chess-games' ? !newData.exists() || newData.val() === null || newData.hasChildren(['from', 'to']) : !newData.exists()"
+             ".validate": "($game_key === 'chess-games' || $game_key === 'gobblet-games') ? !newData.exists() || newData.val() === null || newData.hasChildren() : !newData.exists()"
         },
 
         // Disallow any other unknown top-level properties

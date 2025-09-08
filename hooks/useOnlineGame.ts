@@ -255,18 +255,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
                 playSound('notify');
             }
             
-            // Opponent made a move (for non-chess games)
-            if (
-                gameDbKey !== 'chess-games' &&
-                onlineGameState.currentPlayer === playerSymbol &&
-                prevOnlineGameState.currentPlayer !== playerSymbol &&
-                !onlineGameState.winner &&
-                onlineGameState.players.X && onlineGameState.players.O
-            ) {
-                playSound('place');
-            }
-
-            // Game ended
+            // Game ended - play win/loss/draw sound
             if (!prevOnlineGameState.winner && onlineGameState.winner) {
                 const gameId = dbKeyToGameId(gameDbKey);
                 if (onlineGameState.winner === 'Draw') {
@@ -276,14 +265,14 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
                     playSound('win');
                     if (gameId) recordGame(gameId, 'win');
                 } else {
-                    playSound('draw'); // Loss sound
+                    playSound('draw'); // Loss sound is same as draw
                     if (gameId) recordGame(gameId, 'loss');
                 }
             }
             
             // New message received from opponent
             if (
-                onlineGameState.chatMessages.length > prevOnlineGameState.chatMessages.length &&
+                (onlineGameState.chatMessages?.length || 0) > (prevOnlineGameState.chatMessages?.length || 0) &&
                 onlineGameState.chatMessages[onlineGameState.chatMessages.length - 1].senderSymbol !== playerSymbol
             ) {
                  playSound('notify');

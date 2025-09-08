@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Player } from '../types';
 import BackButton from './BackButton';
 import useSounds from './useSounds';
@@ -15,6 +15,14 @@ import OnlineGameWrapper from './OnlineGameWrapper';
 // --- Global Declarations & Helpers ---
 declare const firebase: any;
 const db = firebase.database();
+
+function usePrevious<T>(value: T): T | undefined {
+    const ref = useRef<T | undefined>(undefined);
+    useEffect(() => {
+        ref.current = value;
+    }, [value]);
+    return ref.current;
+}
 
 // --- Type Definitions ---
 type PieceSize = 0 | 1 | 2;
@@ -41,6 +49,7 @@ interface OnlineGameState extends BaseOnlineGameState {
   board: BoardState;
   homePiles: HomePiles;
   winningLine: number[][];
+  lastMove: { wasCapture: boolean } | null;
    players: {
         X: OnlinePlayer | null;
         O: OnlinePlayer | null;
@@ -69,6 +78,7 @@ const createInitialOnlineState = (playerName: string, deviceId: string, avatarUr
   currentPlayer: 'X',
   winner: null,
   winningLine: [],
+  lastMove: null,
   players: { X: { deviceId, name: playerName, avatarUrl }, O: null },
   createdAt: firebase.database.ServerValue.TIMESTAMP,
   rematch: { X: false, O: false },
@@ -80,6 +90,7 @@ const getRematchState = (): Partial<OnlineGameState> => ({
     board: createInitialBoard(),
     homePiles: createInitialPiles(),
     winningLine: [],
+    lastMove: null,
     chatMessages: [],
 });
 
@@ -121,6 +132,7 @@ const reconstructOnlineState = (gameData: any): OnlineGameState => {
     board: reconstructedBoard,
     homePiles: reconstructedPiles,
     winningLine: gameData.winningLine || [],
+    lastMove: gameData.lastMove || null,
     players: gameData.players || { X: null, O: null },
     rematch: gameData.rematch || { X: false, O: false },
     chatMessages: gameData.chatMessages || [],
@@ -165,6 +177,26 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu, descrip
       handleChangeProfileRequest,
       sendChatMessage,
   } = useOnlineGame('gobblet-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
+
+  const prevOnlineGameState = usePrevious(onlineGameState);
+
+  useEffect(() => {
+    if (gameMode !== 'online' || !onlineGameState || !prevOnlineGameState || !playerSymbol) return;
+
+    // Opponent made a move, it's now my turn
+    if (
+        onlineGameState.currentPlayer === playerSymbol &&
+        prevOnlineGameState.currentPlayer !== playerSymbol &&
+        !onlineGameState.winner
+    ) {
+        if (onlineGameState.lastMove) {
+            playSound(onlineGameState.lastMove.wasCapture ? 'capture' : 'place');
+        } else {
+            // Fallback for older game states that might not have lastMove
+            playSound('place');
+        }
+    }
+  }, [onlineGameState, prevOnlineGameState, gameMode, playerSymbol, playSound]);
 
   // --- Game Logic ---
   const checkWinner = useCallback((currentBoard: BoardState): { winner: Player; line: number[][] } | null => {
@@ -270,7 +302,12 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu, descrip
         return;
       }
       
-      playSound('place');
+      const wasCapture = gs.board[r][c].length > 0;
+      if (wasCapture) {
+        playSound('capture');
+      } else {
+        playSound('place');
+      }
       
       const { newBoard, newHomePiles } = applyMove({ ...selection, to: {r,c} }, gs.board, gs.homePiles);
       
@@ -278,10 +315,11 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu, descrip
       const nextPlayer = currentTurnPlayer === 'X' ? 'O' : 'X';
 
       if (isOnline) {
-        const updates: Partial<Pick<OnlineGameState, 'board' | 'homePiles' | 'currentPlayer' | 'winner' | 'winningLine'>> = {
+        const updates: Partial<Pick<OnlineGameState, 'board' | 'homePiles' | 'currentPlayer' | 'winner' | 'winningLine' | 'lastMove'>> = {
             board: newBoard,
             homePiles: newHomePiles,
-            currentPlayer: nextPlayer
+            currentPlayer: nextPlayer,
+            lastMove: { wasCapture }
         };
         if (result) {
             updates.winner = result.winner;
@@ -420,7 +458,8 @@ const GobbletGobblers: React.FC<GobbletGobblersProps> = ({ onBackToMenu, descrip
             const timer = setTimeout(() => {
                 const { move } = minimax(board, homePiles, 2, -Infinity, Infinity, true); // Depth 2 for performance
                 if (move) {
-                    playSound('place');
+                    const wasCapture = board[move.to.r][move.to.c].length > 0;
+                    playSound(wasCapture ? 'capture' : 'place');
                     const { newBoard, newHomePiles } = applyMove(move, board, homePiles);
                     const result = checkWinner(newBoard);
                     setBoard(newBoard);

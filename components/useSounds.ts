@@ -1,10 +1,28 @@
 import { useCallback } from 'react';
 
 // Define the types of sounds the application can play.
-export type SoundName = 'place' | 'win' | 'draw' | 'select' | 'back' | 'notify' | 'check' | 'capture';
+export type SoundName = 
+  'place' | 'win' | 'draw' | 'select' | 'back' | 'notify' | 'capture' | 
+  'chess-move-self' | 'chess-move-opponent' | 'chess-capture' | 'chess-castle' | 
+  'chess-move-check' | 'chess-promote' | 'chess-illegal' | 'chess-game-end';
 
-// A single AudioContext is created and reused. It's initialized lazily on the first sound playback.
+// A single AudioContext for programmatic sounds.
 let audioContext: AudioContext | null = null;
+// Cache for URL-based audio elements to prevent re-downloading.
+const audioCache: { [key in SoundName]?: HTMLAudioElement } = {};
+
+// URLs for the chess-specific sounds.
+const soundUrls: Partial<{ [key in SoundName]: string }> = {
+    'chess-game-end': 'http://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/game-end.mp3',
+    'chess-capture': 'http://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/capture.mp3',
+    'chess-castle': 'http://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/castle.mp3',
+    'chess-move-self': 'http://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-self.mp3',
+    'chess-move-opponent': 'http://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-opponent.mp3',
+    'chess-move-check': 'http://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-check.mp3',
+    'chess-promote': 'http://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/promote.mp3',
+    'chess-illegal': 'http://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/illegal.mp3',
+};
+
 
 // Helper to ensure the AudioContext is running. Browsers often require a user interaction to start it.
 const getAudioContext = (): AudioContext => {
@@ -15,8 +33,27 @@ const getAudioContext = (): AudioContext => {
   return audioContext;
 };
 
-// Main function to play a sound. It creates oscillators and gain nodes to generate audio programmatically.
+// Main function to play a sound.
 const playSoundEffect = (soundName: SoundName) => {
+  // Handle URL-based sounds first.
+  if (soundUrls[soundName]) {
+    try {
+        if (!audioCache[soundName]) {
+            audioCache[soundName] = new Audio(soundUrls[soundName]!);
+        }
+        const audio = audioCache[soundName];
+        if (audio) {
+            audio.currentTime = 0;
+            // The play() method returns a Promise which can be safely ignored here.
+            audio.play().catch(e => console.warn(`Error playing sound ${soundName}:`, e));
+        }
+    } catch (e) {
+        console.warn(`Could not create or play audio for ${soundName}:`, e);
+    }
+    return;
+  }
+  
+  // Fallback to programmatic sounds for other games/actions.
   const ctx = getAudioContext();
 
   // Resume the context if it's suspended (e.g., due to browser autoplay policies).
@@ -56,7 +93,7 @@ const playSoundEffect = (soundName: SoundName) => {
     case 'place':
       playTone(350, now, 0.1, 'triangle', 0.4);
       break;
-    case 'capture':
+    case 'capture': // Used by Gobblet Gobblers
       playTone(200, now, 0.15, 'square', 0.5);
       break;
     case 'select':
@@ -64,9 +101,6 @@ const playSoundEffect = (soundName: SoundName) => {
       break;
     case 'notify':
       playTone(880, now, 0.3, 'sine', 0.5);
-      break;
-    case 'check':
-      playTone(987.77, now, 0.15, 'square', 0.3); // B5 note for urgency
       break;
     case 'win':
       // Ascending arpeggio for a win

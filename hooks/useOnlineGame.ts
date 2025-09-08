@@ -145,7 +145,7 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         try {
             const snapshot = await roomRef.get();
             const gameData: T | null = snapshot.val();
-            const isExpired = gameData && (Date.now() - gameData.createdAt > 3600 * 1000 * 3); // 3 hours
+            const isExpired = gameData && (Date.now() - gameData.createdAt > 3600 * 1000 * 1); // 1 hour
 
             let joined = false;
             let symbol: Player | null = null;

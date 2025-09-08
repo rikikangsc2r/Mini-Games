@@ -92,123 +92,7 @@
         object-fit: cover;
       }
 
-      /* Chess Game Styles */
-      .board-layout-wrapper {
-        position: relative; /* Needed for absolute positioning of animating piece */
-        display: grid;
-        grid-template-areas:
-          "ranks board"
-          ". files";
-        grid-template-columns: auto 1fr;
-        grid-template-rows: 1fr auto;
-        width: clamp(320px, 90vw, 700px);
-        aspect-ratio: 1 / 1;
-        font-family: sans-serif;
-        color: #ced4da;
-        user-select: none;
-      }
-      .board-ranks, .board-files {
-        display: flex;
-        justify-content: space-around;
-        font-size: 0.8em;
-        font-weight: bold;
-      }
-      .board-ranks {
-        grid-area: ranks;
-        flex-direction: column;
-        padding-right: 8px;
-      }
-      .board-files {
-        grid-area: files;
-        flex-direction: row;
-        padding-top: 8px;
-      }
-      .chess-board-grid {
-        position: relative; /* Added for correct child absolute positioning */
-        grid-area: board;
-        display: grid;
-        grid-template-columns: repeat(8, 1fr);
-        grid-template-rows: repeat(8, 1fr);
-        width: 100%;
-        height: 100%;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.4);
-        border: 2px solid #343a40;
-        border-radius: 4px;
-        overflow: hidden;
-      }
-      .chess-square {
-        position: relative;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        cursor: pointer;
-      }
-      .chess-square.light { background-color: #f0d9b5; }
-      .chess-square.dark { background-color: #b58863; }
-
-      /* Chess Piece Styles */
-      .chess-piece-container {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      .chess-piece {
-        font-size: clamp(28px, 9.5vmin, 50px);
-        line-height: 1;
-        z-index: 10;
-        pointer-events: none;
-        transform: scale(1);
-        transition: transform 0.1s ease-in-out;
-      }
-      .chess-piece.white { color: #f8f9fa; text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 1px rgba(0,0,0,1); }
-      .chess-piece.black { color: #212529; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
-      .chess-piece.large { font-size: clamp(40px, 12vmin, 60px); }
-
-      /* Animating Piece */
-      .animating-piece {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 12.5%; /* 100% / 8 squares */
-        height: 12.5%;
-        z-index: 100;
-        pointer-events: none;
-      }
-
-      /* Square Overlay Styles */
-      .square-overlay {
-        position: absolute;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
-        z-index: 5;
-        pointer-events: none;
-      }
-      .highlight-move { background-color: rgba(25, 135, 84, 0.5); }
-      .selected { box-shadow: inset 0 0 0 4px #16a34a; }
-      .check { background: radial-gradient(circle, rgba(220,53,69,0.7) 0%, rgba(220,53,69,0) 75%); }
-      
-      .possible-move {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      .move-dot {
-        width: 30%;
-        height: 30%;
-        background-color: rgba(0,0,0,0.2);
-        border-radius: 50%;
-      }
-      .capture-ring {
-        width: 90%;
-        height: 90%;
-        border: 5px solid rgba(0,0,0,0.2);
-        border-radius: 50%;
-        box-sizing: border-box;
-      }
-
-      /* Captured Pieces Styles */
+      /* Captured Pieces Styles (Used by Chess) */
       .captured-pieces-container {
         min-height: 28px;
         display: flex;
@@ -223,41 +107,6 @@
       .captured-piece.white { color: #f8f9fa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
       .captured-piece.black { color: #212529; }
 
-
-      /* Promotion Modal Styles */
-      .promotion-overlay {
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background-color: rgba(0,0,0,0.6);
-        backdrop-filter: blur(3px);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 200; /* Increased z-index */
-      }
-      .promotion-box {
-        background-color: #495057;
-        padding: 1rem;
-        border-radius: 8px;
-        display: flex;
-        gap: 0.5rem;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-      }
-      .promotion-piece-choice {
-        width: clamp(50px, 15vmin, 70px);
-        height: clamp(50px, 15vmin, 70px);
-        background-color: #6c757d;
-        border-radius: 4px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        cursor: pointer;
-        transition: transform 0.2s ease, background-color 0.2s ease;
-      }
-      .promotion-piece-choice:hover {
-        transform: scale(1.1);
-        background-color: #adb5bd;
-      }
 
       /* Connect 4 Styles */
       .connect4-container {
@@ -548,7 +397,8 @@
   "imports": {
     "react/": "https://aistudiocdn.com/react@^19.1.1/",
     "react": "https://aistudiocdn.com/react@^19.1.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/"
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react-chessboard": "https://aistudiocdn.com/react-chessboard@^4.3.1"
   }
 }
 </script>

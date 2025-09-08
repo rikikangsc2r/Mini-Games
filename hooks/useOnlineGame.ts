@@ -187,31 +187,45 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
     
     // Logika rematch yang diabstraksikan
     useEffect(() => {
-        if (gameMode === 'online' && onlineGameState?.rematch.X && onlineGameState?.rematch.O) {
-            const roomRef = db.ref(`${gameDbKey}/${roomId}`);
-            
-            const newStartingPlayer = onlineGameState.startingPlayer === 'X' ? 'O' : 'X';
-            
-            // Tukar pemain
-            const playerX = onlineGameState.players.X;
-            const playerO = onlineGameState.players.O;
-            
-            const commonResetState = {
-                players: { X: playerO, O: playerX }, // Pemain ditukar
-                currentPlayer: newStartingPlayer,
-                winner: null,
-                rematch: { X: false, O: false },
-                startingPlayer: newStartingPlayer,
-            };
-
-            const gameSpecificResetState = getRematchState();
-            
-            roomRef.update({
-                ...commonResetState,
-                ...gameSpecificResetState,
-            });
+        // Mencegah berjalan pada pemuatan awal atau jika status tidak ada
+        if (!onlineGameState || !prevOnlineGameState || !playerSymbol) {
+            return;
         }
-    }, [onlineGameState, gameMode, roomId, gameDbKey, getRematchState]);
+
+        // Kami hanya ingin memicu logika reset SEKALI, saat kedua flag berubah menjadi true.
+        // Status sebelumnya tidak boleh memiliki kedua flag sebagai true.
+        const bothReadyNow = onlineGameState.rematch.X && onlineGameState.rematch.O;
+        const wereBothReadyBefore = prevOnlineGameState.rematch.X && prevOnlineGameState.rematch.O;
+
+        if (gameMode === 'online' && bothReadyNow && !wereBothReadyBefore) {
+            // Tunjuk satu klien (pemain awal dari game yang selesai) untuk melakukan reset.
+            // Ini mencegah kondisi balapan di mana kedua klien mencoba memperbarui status secara bersamaan.
+            if (playerSymbol === onlineGameState.startingPlayer) {
+                const roomRef = db.ref(`${gameDbKey}/${roomId}`);
+                
+                const newStartingPlayer = onlineGameState.startingPlayer === 'X' ? 'O' : 'X';
+                
+                // Tukar objek pemain
+                const playerX = onlineGameState.players.X;
+                const playerO = onlineGameState.players.O;
+                
+                const commonResetState = {
+                    players: { X: playerO, O: playerX }, // Pemain ditukar
+                    currentPlayer: newStartingPlayer,
+                    winner: null,
+                    rematch: { X: false, O: false },
+                    startingPlayer: newStartingPlayer,
+                };
+    
+                const gameSpecificResetState = getRematchState();
+                
+                roomRef.update({
+                    ...commonResetState,
+                    ...gameSpecificResetState,
+                });
+            }
+        }
+    }, [onlineGameState, prevOnlineGameState, playerSymbol, gameMode, roomId, gameDbKey, getRematchState]);
 
     const changeGameMode = (mode: GameMode) => {
         playSound('select');

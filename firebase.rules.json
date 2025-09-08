@@ -18,7 +18,7 @@
 
         "players": {
           "X": {
-            // Player X must have a deviceId, name, and avatar. deviceId can only change during a valid player swap.
+            // Player X must have a deviceId, name, and avatar. deviceId can only change during a valid player swap or if the room is expired.
             ".validate": "
               newData.hasChildren(['deviceId', 'name', 'avatarUrl']) &&
               newData.child('deviceId').isString() &&
@@ -30,7 +30,8 @@
                 ( // Allow if swapping with player O
                   newData.child('deviceId').val() === data.parent().child('O/deviceId').val() &&
                   newData.parent().child('O/deviceId').val() === data.child('deviceId').val()
-                )
+                ) ||
+                (now - data.parent().parent().child('createdAt').val() > 3600000) // Allow if room is older than 1 hour
               )
             "
           },
@@ -81,8 +82,8 @@
         },
 
         "createdAt": {
-          // Must be a number. On creation, it must be the server timestamp. It cannot be changed after creation.
-          ".validate": "newData.isNumber() && (!data.exists() ? newData.val() === now : newData.val() === data.val())"
+          // Must be a number. On creation, it must be the server timestamp. It can only be changed if the room is older than 1 hour.
+          ".validate": "newData.isNumber() && (!data.exists() ? newData.val() === now : (newData.val() === data.val() || (now - data.val() > 3600000 && newData.val() === now)))"
         },
 
         "rematch": {

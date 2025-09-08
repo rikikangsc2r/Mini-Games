@@ -140,41 +140,59 @@ export const useOnlineGame = <T extends BaseOnlineGameState>(
         playSound('select');
         setIsLoading(true);
         setError('');
-        
+
         const roomRef = db.ref(`${gameDbKey}/${enteredRoomId}`);
+
         try {
-            const snapshot = await roomRef.get();
-            const gameData: T | null = snapshot.val();
-            const isExpired = gameData && (Date.now() - gameData.createdAt > 3600 * 1000 * 1); // 1 hour
-
-            let joined = false;
-            let symbol: Player | null = null;
-
-            if (!snapshot.exists() || isExpired) {
-                const newGame = createInitialGameState(playerProfile.name, deviceId.current, playerProfile.avatarUrl);
-                await roomRef.set(newGame);
-                symbol = 'X';
-                joined = true;
-            } else {
-                if (gameData.players.X?.deviceId === deviceId.current) {
-                   symbol = 'X';
-                   joined = true;
-                } else if (gameData.players.O?.deviceId === deviceId.current) {
-                    symbol = 'O';
-                    joined = true;
-                } else if (!gameData.players.O) {
-                    await roomRef.child('players/O').set({ deviceId: deviceId.current, name: playerProfile.name, avatarUrl: playerProfile.avatarUrl });
-                    symbol = 'O';
-                    joined = true;
-                } else {
-                    setError('Room sudah penuh.');
+            const { committed, snapshot } = await roomRef.transaction(gameData => {
+                // Jika room tidak ada, buat room baru.
+                if (gameData === null) {
+                    return createInitialGameState(playerProfile.name, deviceId.current, playerProfile.avatarUrl);
                 }
-            }
 
-            if(joined && symbol) {
-                setRoomId(enteredRoomId);
-                setPlayerSymbol(symbol);
-                setOnlineStep('game');
+                // Jika room kedaluwarsa, daur ulang.
+                const oneHour = 3600 * 1000;
+                const isExpired = Date.now() - gameData.createdAt > oneHour;
+                if (isExpired) {
+                    return createInitialGameState(playerProfile.name, deviceId.current, playerProfile.avatarUrl);
+                }
+
+                // Room ada dan tidak kedaluwarsa. Periksa apakah bisa bergabung.
+                // Periksa apakah pengguna sudah ada di dalam game (bergabung kembali).
+                if (gameData.players.X?.deviceId === deviceId.current || gameData.players.O?.deviceId === deviceId.current) {
+                    return gameData; // Tidak perlu perubahan, pengguna sudah ada di dalam.
+                }
+
+                // Periksa apakah ada slot kosong untuk pemain O.
+                if (!gameData.players.O) {
+                    gameData.players.O = { deviceId: deviceId.current, name: playerProfile.name, avatarUrl: playerProfile.avatarUrl };
+                    return gameData;
+                }
+                
+                // Room penuh dan tidak kedaluwarsa. Batalkan transaksi.
+                return; // undefined membatalkan transaksi
+            });
+
+            if (committed) {
+                const finalGameState = snapshot.val();
+                let symbol: Player | null = null;
+                if (finalGameState.players.X?.deviceId === deviceId.current) {
+                    symbol = 'X';
+                } else if (finalGameState.players.O?.deviceId === deviceId.current) {
+                    symbol = 'O';
+                }
+
+                if (symbol) {
+                    setRoomId(enteredRoomId);
+                    setPlayerSymbol(symbol);
+                    setOnlineStep('game');
+                } else {
+                     // Ini terjadi jika transaksi dibatalkan (misalnya, room penuh).
+                     setError('Room sudah penuh.');
+                }
+            } else {
+                // Transaksi dibatalkan oleh logika kita.
+                setError('Room sudah penuh.');
             }
 
         } catch (e) {

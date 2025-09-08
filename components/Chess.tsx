@@ -46,7 +46,6 @@ const createInitialOnlineState = (playerName: string, deviceId: string, avatarUr
 const getRematchState = (): Partial<OnlineGameState> => ({
     fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
     lastMove: null,
-    winner: null,
     chatMessages: [],
 });
 

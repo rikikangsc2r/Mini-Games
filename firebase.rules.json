@@ -18,24 +18,38 @@
 
         "players": {
           "X": {
-            // Player X must have a deviceId, name, and avatar. Once set, the deviceId cannot be changed.
+            // Player X must have a deviceId, name, and avatar. deviceId can only change during a valid player swap.
             ".validate": "
               newData.hasChildren(['deviceId', 'name', 'avatarUrl']) &&
               newData.child('deviceId').isString() &&
               newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length < 30 &&
               newData.child('avatarUrl').isString() && newData.child('avatarUrl').val().length > 0 &&
-              (!data.exists() || data.child('deviceId').val() === newData.child('deviceId').val())
+              (
+                !data.child('deviceId').exists() || // Allow on creation
+                data.child('deviceId').val() === newData.child('deviceId').val() || // Allow if unchanged
+                ( // Allow if swapping with player O
+                  newData.child('deviceId').val() === data.parent().child('O/deviceId').val() &&
+                  newData.parent().child('O/deviceId').val() === data.child('deviceId').val()
+                )
+              )
             "
           },
           "O": {
-             // Player O is optional, but if present, must be valid. deviceId is immutable.
+             // Player O is optional, but if present, must be valid. deviceId can only change during a valid player swap.
             ".validate": "
               !newData.exists() || (
                 newData.hasChildren(['deviceId', 'name', 'avatarUrl']) &&
                 newData.child('deviceId').isString() &&
                 newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length < 30 &&
                 newData.child('avatarUrl').isString() && newData.child('avatarUrl').val().length > 0 &&
-                (!data.exists() || data.child('deviceId').val() === newData.child('deviceId').val())
+                (
+                  !data.child('deviceId').exists() || // Allow on creation
+                  data.child('deviceId').val() === newData.child('deviceId').val() || // Allow if unchanged
+                  ( // Allow if swapping with player X
+                    newData.child('deviceId').val() === data.parent().child('X/deviceId').val() &&
+                    newData.parent().child('X/deviceId').val() === data.child('deviceId').val()
+                  )
+                )
               )
             "
           },

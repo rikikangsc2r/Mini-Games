@@ -11,6 +11,7 @@ import GameLobby from './GameLobby';
 import GameModeSelector from './GameModeSelector';
 import ChatAndEmotePanel from './ChatAndEmotePanel';
 import InGameMessageDisplay from './InGameMessageDisplay';
+import OnlineGameWrapper from './OnlineGameWrapper';
 
 // Objek firebase global dari skrip di index.html
 declare const firebase: any;
@@ -89,12 +90,14 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
       sendChatMessage,
   } = useOnlineGame('games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
   
-  // State game lokal
+  // State game lokal & AI
   const [board, setBoard] = useState<(Player | null)[]>(Array(9).fill(null));
   const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
   const [winner, setWinner] = useState<Player | 'Draw' | null>(null);
   const [winningLine, setWinningLine] = useState<number[]>([]);
   const [showRules, setShowRules] = useState(false);
+  const [isAiThinking, setIsAiThinking] = useState(false);
+  const [aiStarts, setAiStarts] = useState(false);
 
   const calculateWinner = useCallback((squares: (Player | null)[]): { winner: Player | 'Draw', line: number[] } | null => {
     const lines = [
@@ -114,9 +117,9 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
     return null;
   }, []);
   
-  // Efek untuk game lokal
+  // Efek untuk game lokal & AI
   useEffect(() => {
-    if (gameMode !== 'local') return;
+    if (gameMode !== 'local' && gameMode !== 'ai') return;
     const result = calculateWinner(board);
     if (result) {
       if (!winner) { // Mainkan suara hanya saat transisi
@@ -128,8 +131,56 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
     }
   }, [board, gameMode, calculateWinner, playSound, winner]);
 
-  const handleLocalClick = (index: number) => {
-    if (winner || board[index]) return;
+  const minimax = useCallback((boardState: (Player | null)[], depth: number, isMax: boolean): number => {
+    const result = calculateWinner(boardState);
+    if (result) {
+        if (result.winner === 'O') return 10 - depth;
+        if (result.winner === 'X') return -10 + depth;
+        return 0; // Draw
+    }
+
+    if (isMax) {
+        let best = -Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (boardState[i] === null) {
+                boardState[i] = 'O';
+                best = Math.max(best, minimax(boardState, depth + 1, !isMax));
+                boardState[i] = null;
+            }
+        }
+        return best;
+    } else {
+        let best = Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (boardState[i] === null) {
+                boardState[i] = 'X';
+                best = Math.min(best, minimax(boardState, depth + 1, !isMax));
+                boardState[i] = null;
+            }
+        }
+        return best;
+    }
+  }, [calculateWinner]);
+
+  const findBestMove = useCallback((boardState: (Player | null)[]) => {
+      let bestVal = -Infinity;
+      let bestMove = -1;
+      for (let i = 0; i < 9; i++) {
+          if (boardState[i] === null) {
+              boardState[i] = 'O';
+              let moveVal = minimax(boardState, 0, false);
+              boardState[i] = null;
+              if (moveVal > bestVal) {
+                  bestMove = i;
+                  bestVal = moveVal;
+              }
+          }
+      }
+      return bestMove;
+  }, [minimax]);
+
+  const handleNonOnlineClick = (index: number) => {
+    if (winner || board[index] || (gameMode === 'ai' && currentPlayer === 'O')) return;
     playSound('place');
     const newBoard = [...board];
     newBoard[index] = currentPlayer;
@@ -137,12 +188,40 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
     setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
   };
 
-  const resetLocalGame = () => {
+  useEffect(() => {
+    if (gameMode === 'ai' && currentPlayer === 'O' && !winner) {
+      setIsAiThinking(true);
+      const timer = setTimeout(() => {
+        const aiMove = findBestMove([...board]);
+        if (aiMove !== -1) {
+            const newBoard = [...board];
+            newBoard[aiMove] = 'O';
+            setBoard(newBoard);
+            setCurrentPlayer('X');
+            playSound('place');
+        }
+        setIsAiThinking(false);
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+  }, [gameMode, currentPlayer, winner, board, findBestMove, playSound]);
+
+  const resetGame = () => {
     playSound('select');
     setBoard(Array(9).fill(null));
     setCurrentPlayer('X');
     setWinner(null);
     setWinningLine([]);
+  };
+  
+  const handleAiRematch = () => {
+      playSound('select');
+      const newAiStarts = !aiStarts;
+      setAiStarts(newAiStarts);
+      setBoard(Array(9).fill(null));
+      setCurrentPlayer(newAiStarts ? 'O' : 'X');
+      setWinner(null);
+      setWinningLine([]);
   };
 
   const handleOnlineClick = (index: number) => {
@@ -166,8 +245,18 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
   };
 
   const getStatusMessage = () => {
-    if (gameMode === 'local') {
-        if (winner) return winner === 'Draw' ? "Hasilnya Seri!" : `Pemain ${winner} Menang!`;
+    if (gameMode === 'local' || gameMode === 'ai') {
+        if (winner) {
+          if (winner === 'Draw') return "Hasilnya Seri!";
+          if (gameMode === 'ai') {
+              return winner === 'X' ? "Kamu Menang!" : "AI Menang!";
+          }
+          return `Pemain ${winner} Menang!`;
+        }
+        if (gameMode === 'ai') {
+            if (isAiThinking) return "AI sedang berpikir...";
+            return currentPlayer === 'X' ? "Giliranmu" : "Giliran AI";
+        }
         return `Giliran Pemain ${currentPlayer}`;
     }
     if (onlineGameState) {
@@ -205,35 +294,31 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
       if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
       if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
 
-      const isMyTurn = onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner;
-      const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
-      const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
-      return (
-          <div className="text-center w-100 position-relative d-flex flex-column align-items-center">
-              <div className="mb-4 d-flex flex-column align-items-center gap-3">
-                  <div className="d-flex justify-content-center align-items-center gap-3 w-100 position-relative player-display-container-responsive" style={{maxWidth: '450px'}}>
-                      <PlayerDisplay player={onlineGameState.players.X} />
-                      <span className="gradient-text fw-bolder fs-4">VS</span>
-                      <PlayerDisplay player={onlineGameState.players.O} />
-                      <InGameMessageDisplay
-                          messages={onlineGameState.chatMessages}
-                          players={onlineGameState.players}
-                          myPlayerSymbol={playerSymbol}
-                       />
-                  </div>
-                  <p className="text-muted mb-0">Room: {roomId}</p>
-                  <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
-              </div>
-              {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, handleOnlineClick, isMyTurn)}
-              
-              <ChatAndEmotePanel onSendMessage={sendChatMessage} disabled={!isMyTurn} />
+      const mySymbol = playerSymbol!;
+      const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
 
-              {onlineGameState.winner && (
-                  <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-5 btn btn-primary btn-lg">
-                        Rematch ({rematchCount}/2)
-                  </button>
+      return (
+          <OnlineGameWrapper
+              myPlayer={onlineGameState.players[mySymbol]}
+              opponent={onlineGameState.players[opponentSymbol]}
+              mySymbol={mySymbol}
+              roomId={roomId}
+              statusMessage={getStatusMessage()}
+              isMyTurn={onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner}
+              isGameOver={!!onlineGameState.winner}
+              rematchCount={(onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0)}
+              amIReadyForRematch={!!(playerSymbol && onlineGameState.rematch[playerSymbol])}
+              onRematch={handleRematch}
+              chatMessages={onlineGameState.chatMessages}
+              onSendMessage={sendChatMessage}
+          >
+              {renderGameBoard(
+                  onlineGameState.board,
+                  onlineGameState.winningLine,
+                  handleOnlineClick,
+                  onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner
               )}
-          </div>
+          </OnlineGameWrapper>
       );
   };
 
@@ -247,8 +332,18 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ onBackToMenu, description }) => {
             <div className="mb-5">
                 <p className={`mt-4 fs-4 fw-semibold ${winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
             </div>
-            {renderGameBoard(board, winningLine, handleLocalClick, !winner)}
-            {winner && <button onClick={resetLocalGame} className="mt-5 btn btn-primary btn-lg">Main Lagi</button>}
+            {renderGameBoard(board, winningLine, handleNonOnlineClick, !winner)}
+            {winner && <button onClick={resetGame} className="mt-5 btn btn-primary btn-lg">Main Lagi</button>}
+          </div>
+        );
+      case 'ai':
+        return (
+          <div className="text-center">
+            <div className="mb-5">
+                <p className={`mt-4 fs-4 fw-semibold ${winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
+            </div>
+            {renderGameBoard(board, winningLine, handleNonOnlineClick, !winner && !isAiThinking)}
+            {winner && <button onClick={handleAiRematch} className="mt-5 btn btn-primary btn-lg">Rematch</button>}
           </div>
         );
       case 'online':

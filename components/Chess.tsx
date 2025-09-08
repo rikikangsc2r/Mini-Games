@@ -10,33 +10,31 @@ import GameLobby from './GameLobby';
 import GameModeSelector from './GameModeSelector';
 import ChatAndEmotePanel from './ChatAndEmotePanel';
 import InGameMessageDisplay from './InGameMessageDisplay';
+import OnlineGameWrapper from './OnlineGameWrapper';
 
 // --- Global Declarations & Helpers ---
 declare const firebase: any;
+declare const Chess: any;
+type ChessInstance = any;
 const db = firebase.database();
-const ChessJS = (window as any).Chess;
 
-// --- Type Definitions ---
-type PieceType = 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
-type PieceColor = 'w' | 'b';
-interface Piece { type: PieceType; color: PieceColor; }
-interface Square { square: string; piece: Piece | null; }
-interface Move { from: string; to: string; promotion?: PieceType }
-
-interface OnlineChessGameState extends BaseOnlineGameState {
+interface OnlineGameState extends BaseOnlineGameState {
     fen: string;
-    lastMove: { from: string, to: string } | null;
+    lastMove: { from: string; to: string } | null;
     players: {
         X: OnlinePlayer | null;
         O: OnlinePlayer | null;
     };
 }
+type PieceStyle = 'unicode' | 'fa';
+type Piece = { type: string, color: 'b' | 'w' };
+type Square = string;
 
-// --- Helper Functions ---
-const createInitialOnlineState = (playerName: string, deviceId: string, avatarUrl: string): OnlineChessGameState => ({
+// --- Game State Creation ---
+const createInitialOnlineState = (playerName: string, deviceId: string, avatarUrl: string): OnlineGameState => ({
     fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
     lastMove: null,
-    currentPlayer: 'X', // 'X' is always white
+    currentPlayer: 'X', // 'X' is always white in chess
     winner: null,
     players: { X: { deviceId, name: playerName, avatarUrl }, O: null },
     createdAt: firebase.database.ServerValue.TIMESTAMP,
@@ -45,473 +43,546 @@ const createInitialOnlineState = (playerName: string, deviceId: string, avatarUr
     chatMessages: [],
 });
 
-const getRematchState = (): Partial<OnlineChessGameState> => ({
-    fen: new ChessJS().fen(),
+const getRematchState = (): Partial<OnlineGameState> => ({
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
     lastMove: null,
+    winner: null,
     chatMessages: [],
 });
 
-const reconstructOnlineState = (gameData: any): OnlineChessGameState => ({
+
+const reconstructOnlineState = (gameData: any): OnlineGameState => ({
     ...gameData,
-    fen: gameData.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-    lastMove: gameData.lastMove || null,
     players: gameData.players || { X: null, O: null },
     rematch: gameData.rematch || { X: false, O: false },
     chatMessages: gameData.chatMessages || [],
 });
 
-const UNICODE_PIECES: Record<PieceColor, Record<PieceType, string>> = {
-  b: { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚' },
-  w: { p: '♙', n: '♘', b: '♗', r: '♖', q: '♕', k: '♔' },
+
+// --- Helper Components & Functions ---
+const UNICODE_PIECES: Record<string, string> = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟', K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙' };
+const FA_PIECES: Record<string, string> = { k: 'fas fa-chess-king', q: 'fas fa-chess-queen', r: 'fas fa-chess-rook', b: 'fas fa-chess-bishop', n: 'fas fa-chess-knight', p: 'fas fa-chess-pawn', K: 'fas fa-chess-king', Q: 'fas fa-chess-queen', R: 'fas fa-chess-rook', B: 'fas fa-chess-bishop', N: 'fas fa-chess-knight', P: 'fas fa-chess-pawn' };
+
+const getPieceData = (piece: Piece, pieceStyle: PieceStyle) => {
+    const key = piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase();
+    if (pieceStyle === 'unicode') return { content: UNICODE_PIECES[key], className: '' };
+    return { content: '', className: FA_PIECES[key] };
 };
 
-// --- Custom Hook ---
-function usePrevious<T>(value: T): T | undefined {
-    const ref = useRef<T | undefined>(undefined);
-    useEffect(() => {
-        ref.current = value;
-    }, [value]);
-    return ref.current;
-}
+const PieceComponent: React.FC<{ piece: Piece; pieceStyle: PieceStyle }> = ({ piece, pieceStyle }) => {
+    const { content, className } = getPieceData(piece, pieceStyle);
+    const colorClass = piece.color === 'w' ? 'white' : 'black';
+    return <span className={`chess-piece ${colorClass} ${className} ${pieceStyle === 'fa' ? 'fa-piece' : ''}`}>{content}</span>;
+};
 
-// --- React Components ---
-
-interface SquareProps {
-  square: string;
-  piece: Piece | null;
-  pieceOnSquare: Piece | null;
-  isLight: boolean;
-  isSelected: boolean;
-  isPossible: boolean;
-  isLastMove: boolean;
-  isCheck: boolean;
-  onClick: (square: string) => void;
-}
-
-const SquareComponent: React.FC<SquareProps> = React.memo(({
-  square, piece, pieceOnSquare, isLight, isSelected, isLastMove, isCheck, isPossible, onClick
-}) => {
-  return (
-    <div
-      onClick={() => onClick(square)}
-      className={`chess-square ${isLight ? 'light' : 'dark'} ${isSelected ? 'selected' : ''}`}
-      role="button"
-      aria-label={`Square ${square} with ${piece ? `${piece.color} ${piece.type}` : 'empty'}`}
-    >
-      {isLastMove && <div className="square-overlay last-move" />}
-      {isCheck && <div className="square-overlay check" />}
-      
-      {piece && (
-        <span className={`chess-piece ${piece.color === 'w' ? 'white' : 'black'}`}>
-          {UNICODE_PIECES[piece.color][piece.type]}
-        </span>
-      )}
-      
-      {isPossible && (
-        <div className="square-overlay possible-move">
-          {pieceOnSquare ? <div className="capture-ring" /> : <div className="move-dot" />}
-        </div>
-      )}
+const CapturedPiecesDisplay: React.FC<{ pieces: Piece[] }> = ({ pieces }) => (
+    <div className="captured-pieces-container">
+        {pieces.map((p, i) => (
+            <span key={i} className={`captured-piece ${p.color === 'w' ? 'white' : 'black'}`}>
+                {UNICODE_PIECES[p.color === 'w' ? p.type.toUpperCase() : p.type.toLowerCase()]}
+            </span>
+        ))}
     </div>
-  );
-});
+);
+
+const ChessPlayerBar: React.FC<{ player: OnlinePlayer | null; capturedPieces: Piece[]; isMyTurn: boolean; }> = ({ player, capturedPieces, isMyTurn }) => {
+    return (
+        <div className={`chess-player-bar d-flex align-items-center justify-content-between w-100 p-2 rounded ${isMyTurn ? 'bg-success bg-opacity-25' : ''}`} style={{maxWidth: 'clamp(320px, 90vw, 700px)', transition: 'background-color 0.3s ease'}}>
+            <PlayerDisplay player={player} />
+            <CapturedPiecesDisplay pieces={capturedPieces} />
+        </div>
+    );
+};
+
+const getCapturedPieces = (game: ChessInstance): { capturedByWhite: Piece[], capturedByBlack: Piece[] } => {
+    const capturedByWhite: Piece[] = [];
+    const capturedByBlack: Piece[] = [];
+    
+    game.history({ verbose: true }).forEach((move: any) => {
+        if (move.captured) {
+            // FIX: Explicitly type `piece` as `Piece` to ensure `color` is typed as 'b' | 'w' instead of string.
+            const piece: Piece = {
+                type: move.captured,
+                color: move.color === 'w' ? 'b' : 'w' // The captured piece is the opposite color of the mover
+            };
+            if (move.color === 'w') {
+                capturedByWhite.push(piece);
+            } else {
+                capturedByBlack.push(piece);
+            }
+        }
+    });
+    
+    return { capturedByWhite, capturedByBlack };
+};
+
 
 interface ChessProps {
-  onBackToMenu: () => void;
-  description: string;
+    onBackToMenu: () => void;
+    description: string;
 }
 
-const Chess: React.FC<ChessProps> = ({ onBackToMenu, description }) => {
-    // --- State ---
-    const [game, setGame] = useState(() => new ChessJS());
-    const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
-    const [promotionMove, setPromotionMove] = useState<Move | null>(null);
-    const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
-    const [capturedPieces, setCapturedPieces] = useState<Record<PieceColor, Piece[]>>({ w: [], b: [] });
+const ChessGame: React.FC<ChessProps> = ({ onBackToMenu, description }) => {
     const playSound = useSounds();
-    const [showRules, setShowRules] = useState(false);
-    
-    // --- Online Hook ---
     const {
-        gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState,
-        isLoading, error, roomInputRef,
-        handleProfileSubmit, handleEnterRoom, handleRematch, changeGameMode,
+        gameMode, onlineStep, playerProfile, roomId, playerSymbol, onlineGameState, isLoading, error,
+        roomInputRef, handleProfileSubmit, handleEnterRoom, handleRematch: handleOnlineRematch, changeGameMode,
         handleChangeProfileRequest, sendChatMessage,
     } = useOnlineGame('chess-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
     
-    const prevOnlineGameState = usePrevious(onlineGameState);
+    // --- State ---
+    const [game, setGame] = useState<ChessInstance>(new Chess());
+    const [fen, setFen] = useState(game.fen());
+    const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+    const [lastMoveHighlight, setLastMoveHighlight] = useState<{ from: Square; to: Square } | null>(null);
+    const [kingInCheck, setKingInCheck] = useState<Square | null>(null);
+    const [pieceStyle, setPieceStyle] = useState<PieceStyle>('unicode');
+    const [promotionChoice, setPromotionChoice] = useState<{ from: Square; to: Square; color: 'w' | 'b' } | null>(null);
+    const [winner, setWinner] = useState<string | null>(null);
+    const [aiPlayerColor, setAiPlayerColor] = useState<'w' | 'b' | null>(null);
+    const [isAiThinking, setIsAiThinking] = useState(false);
+    const [showRules, setShowRules] = useState(false);
 
-    // --- Memos and Callbacks ---
-    const board = useMemo<Square[][]>(() => game.board().map((row: (Piece | null)[], r: number) => row.map((piece, f) => ({
-        square: 'abcdefgh'[f] + (8 - r),
-        piece
-    }))), [game]);
+    // --- Memos and Refs ---
+    const boardFlipped = useMemo(() => {
+        if (gameMode === 'online') return playerSymbol === 'O';
+        if (gameMode === 'ai') return aiPlayerColor === 'w';
+        return false;
+    }, [gameMode, playerSymbol, aiPlayerColor]);
+
+    const possibleMoves = useMemo(() => {
+        if (!selectedSquare) return [];
+        const moves = game.moves({ square: selectedSquare, verbose: true });
+        return moves.map((move: any) => move.to);
+    }, [selectedSquare, game]);
     
-    const kingInCheckSquare = useMemo(() => {
-        if (!game.in_check()) return null;
-        const kingPos = board.flat().find(s => s.piece?.type === 'k' && s.piece?.color === game.turn());
-        return kingPos?.square;
-    }, [game, board]);
+    const prevOnlineFen = useRef<string | null>(null);
+    const isFetchingAiMove = useRef(false);
 
-    const { myColor, isFlipped, myTurn } = useMemo(() => {
-        const isOnline = gameMode === 'online';
-        if (!isOnline || !onlineGameState || !playerSymbol) {
-            return { myColor: game.turn(), isFlipped: false, myTurn: !game.game_over() };
-        }
-
-        const whitePlayerSymbol = onlineGameState.startingPlayer;
-        const isWhiteForMe = playerSymbol === whitePlayerSymbol;
-        const myColorForThisGame = isWhiteForMe ? 'w' : 'b';
-        const boardIsFlipped = !isWhiteForMe;
-        const currentTurnColor = game.turn();
-        const isMyTurn = (currentTurnColor === myColorForThisGame) && !game.game_over() && !!onlineGameState.players.O;
-
-        return { myColor: myColorForThisGame, isFlipped: boardIsFlipped, myTurn: isMyTurn };
-    }, [gameMode, onlineGameState, playerSymbol, game]);
-    
-    // Sync game state from Firebase and play sounds for opponent's moves
+    // --- Effects ---
     useEffect(() => {
-        if (gameMode !== 'online' || !onlineGameState) return;
-
-        if (!prevOnlineGameState) {
-            setGame(new ChessJS(onlineGameState.fen));
-            return;
+        const storedStyle = localStorage.getItem('chessPieceStyle') as PieceStyle;
+        if (storedStyle === 'unicode' || storedStyle === 'fa') {
+            setPieceStyle(storedStyle);
         }
-
-        if (onlineGameState.fen !== prevOnlineGameState.fen) {
-            const newGame = new ChessJS(onlineGameState.fen);
+    }, []);
+    
+    useEffect(() => {
+        if (gameMode === 'menu') {
+            const newGame = new Chess();
             setGame(newGame);
-
-            const isOpponentMove = newGame.turn() === myColor;
-
-            if (isOpponentMove && onlineGameState.lastMove) {
-                const oldGame = new ChessJS(prevOnlineGameState.fen);
-                const wasCapture = !!oldGame.get(onlineGameState.lastMove.to);
-                
-                if (wasCapture) playSound('back'); else playSound('place');
-                if (newGame.in_check()) playSound('notify');
-            }
+            setFen(newGame.fen());
+            setWinner(null);
+            setSelectedSquare(null);
+            setLastMoveHighlight(null);
+            setKingInCheck(null);
+            setPromotionChoice(null);
         }
-    }, [gameMode, onlineGameState, prevOnlineGameState, myColor, playSound]);
-
-    // Update captured pieces whenever the board changes
-    useEffect(() => {
-        const initialPieces: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 };
-        const currentPieces: Record<PieceColor, Record<string, number>> = { w: { ...initialPieces, k: 1 }, b: { ...initialPieces, k: 1 } };
-        const captured: Record<PieceColor, Piece[]> = { w: [], b: [] };
-
-        game.board().flat().forEach((p: Piece | null) => {
-            if (p) currentPieces[p.color][p.type]--;
-        });
-        
-        (['w', 'b'] as PieceColor[]).forEach(color => {
-            for (const type in initialPieces) {
-                for (let i = 0; i < currentPieces[color][type]; i++) {
-                    captured[color === 'w' ? 'b' : 'w'].push({ type: type as PieceType, color });
-                }
-            }
-        });
-
-        const sortOrder: PieceType[] = ['q', 'r', 'b', 'n', 'p'];
-        captured.w.sort((a, b) => sortOrder.indexOf(a.type) - sortOrder.indexOf(b.type));
-        captured.b.sort((a, b) => sortOrder.indexOf(a.type) - sortOrder.indexOf(b.type));
-
-        setCapturedPieces(captured);
-    }, [game]);
+    }, [gameMode]);
     
-    const makeMove = useCallback((move: Move) => {
-        const newGame = new ChessJS(game.fen());
-        const result = newGame.move(move);
-
-        if (result) {
-            if (result.captured) playSound('back'); else playSound('place');
-            if (newGame.in_check()) playSound('notify');
-            if (newGame.game_over()) {
-                if (newGame.in_checkmate()) playSound('win');
-                else playSound('draw');
-            }
-            
-            if (gameMode === 'online') {
-                const updates: Partial<Pick<OnlineChessGameState, 'fen' | 'lastMove' | 'currentPlayer' | 'winner'>> = {
-                    fen: newGame.fen(),
-                    lastMove: { from: move.from, to: move.to },
-                    currentPlayer: onlineGameState!.currentPlayer === 'X' ? 'O' : 'X'
-                };
-                if (newGame.game_over()) {
-                    if (newGame.in_checkmate()) {
-                        updates.winner = newGame.turn() === 'b' ? 'X' : 'O';
-                    } else {
-                        updates.winner = 'Draw';
+    useEffect(() => {
+        const findKing = (color: 'w' | 'b'): Square | null => {
+            for (let r = 1; r <= 8; r++) {
+                for (const f of 'abcdefgh') {
+                    const square = `${f}${r}`;
+                    const piece = game.get(square);
+                    if (piece && piece.type === 'k' && piece.color === color) {
+                        return square;
                     }
                 }
-                db.ref(`chess-games/${roomId}`).update(updates);
+            }
+            return null;
+        };
+        const currentKingPos = findKing(game.turn());
+        setKingInCheck(game.in_check() ? currentKingPos : null);
+    }, [fen, game]);
+
+    // --- Core Game Logic ---
+    const updateGameStatus = useCallback((currentGame: ChessInstance): boolean => {
+        if (currentGame.game_over()) {
+            if (currentGame.in_checkmate()) {
+                setWinner(currentGame.turn() === 'w' ? 'Black' : 'White');
+                playSound('win');
+            } else if (currentGame.in_draw() || currentGame.in_stalemate() || currentGame.in_threefold_repetition()) {
+                setWinner('Draw');
+                playSound('draw');
+            }
+            return true;
+        } else {
+            setWinner(null);
+            return false;
+        }
+    }, [playSound]);
+
+    const fetchAiMove = useCallback(async (currentFen: string) => {
+        if (isFetchingAiMove.current) return;
+        isFetchingAiMove.current = true;
+        setIsAiThinking(true);
+        try {
+            const response = await fetch('https://nirkyy-stockfish.hf.space/bestmove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fen: currentFen })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Stockfish API error: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            const bestmoveUci = data.bestmove;
+
+            if (bestmoveUci && typeof bestmoveUci === 'string' && bestmoveUci.length >= 4) {
+                const from = bestmoveUci.substring(0, 2);
+                const to = bestmoveUci.substring(2, 4);
+                const promotion = bestmoveUci.length > 4 ? bestmoveUci.substring(4) : undefined;
+                
+                setGame(currentGame => {
+                    const gameCopy = new Chess(currentGame.fen());
+                    const moveResult = gameCopy.move({ from, to, promotion });
+
+                    if (moveResult) {
+                         setFen(gameCopy.fen());
+                         setLastMoveHighlight({ from, to });
+                         // FIX: Moved `updateGameStatus` before `fetchAiMove` to resolve block-scoped variable error.
+                         updateGameStatus(gameCopy);
+
+                         if (!gameCopy.game_over()) {
+                            if (gameCopy.in_check()) {
+                                playSound('check');
+                            } else if (moveResult.flags.includes('c') || moveResult.flags.includes('e')) {
+                                playSound('capture');
+                            } else {
+                                playSound('place');
+                            }
+                         }
+                    }
+                    return gameCopy;
+                });
+
             } else {
-                setGame(newGame);
+                 throw new Error("Invalid bestmove received from API.");
+            }
+        } catch (e) {
+            console.error("Gagal mengambil gerakan AI:", e);
+        } finally {
+            setIsAiThinking(false);
+            isFetchingAiMove.current = false;
+        }
+    }, [playSound, updateGameStatus]);
+    
+    const performMove = useCallback((move: { from: Square; to: Square; promotion?: string }) => {
+        const gameCopy = new Chess(fen);
+        const moveResult = gameCopy.move(move);
+    
+        if (!moveResult) return false;
+    
+        setGame(gameCopy);
+        setFen(gameCopy.fen());
+        setLastMoveHighlight({ from: move.from, to: move.to });
+        setSelectedSquare(null);
+    
+        const isGameOver = updateGameStatus(gameCopy);
+        
+        if (!isGameOver) {
+            if (gameCopy.in_check()) {
+                playSound('check');
+            } else if (moveResult.flags.includes('c') || moveResult.flags.includes('e')) {
+                playSound('capture');
+            } else {
+                playSound('place');
             }
         }
         
-        setSelectedSquare(null);
-        setPossibleMoves([]);
-        setPromotionMove(null);
-        return result;
-    }, [game, gameMode, onlineGameState, roomId, playSound]);
+        if (gameMode === 'online' && playerSymbol) {
+            const opponentSymbol = playerSymbol === 'X' ? 'O' : 'X';
+            const updatePayload: Partial<OnlineGameState> = {
+                fen: gameCopy.fen(),
+                lastMove: { from: move.from, to: move.to },
+                currentPlayer: opponentSymbol,
+            };
+            if (gameCopy.game_over()) {
+                if (gameCopy.in_checkmate()) updatePayload.winner = playerSymbol;
+                else updatePayload.winner = 'Draw';
+            }
+            db.ref(`chess-games/${roomId}`).update(updatePayload);
+        } else if (gameMode === 'ai' && !gameCopy.game_over() && gameCopy.turn() === aiPlayerColor) {
+            setTimeout(() => fetchAiMove(gameCopy.fen()), 500);
+        }
+    
+        return true;
+    }, [fen, gameMode, playerSymbol, aiPlayerColor, playSound, updateGameStatus, roomId, fetchAiMove]);
 
-    const handleSquareClick = useCallback((square: string) => {
-        if (gameMode === 'online' && !myTurn) return;
-        if (game.game_over()) return;
+    const handleSquareClick = (square: Square) => {
+        if (winner || (gameMode === 'ai' && game.turn() === aiPlayerColor) || isAiThinking) return;
 
-        const piece = game.get(square);
+        const pieceOnSquare = game.get(square);
 
         if (selectedSquare) {
             if (square === selectedSquare) {
                 setSelectedSquare(null);
-                setPossibleMoves([]);
                 return;
             }
+            
+            const piece = game.get(selectedSquare);
+            let isPromotion = false;
+            if (piece && piece.type === 'p') {
+                const fromRank = selectedSquare.charAt(1);
+                const toRank = square.charAt(1);
+                isPromotion = (piece.color === 'w' && fromRank === '7' && toRank === '8') ||
+                              (piece.color === 'b' && fromRank === '2' && toRank === '1');
+            }
 
-            const move = { from: selectedSquare, to: square };
-            const isValidMove = game.moves({ square: selectedSquare, verbose: true }).some((m: any) => m.to === square);
-
-            if (isValidMove) {
-                const pieceToMove = game.get(selectedSquare);
-                if (pieceToMove.type === 'p' && ((pieceToMove.color === 'w' && selectedSquare[1] === '7' && square[1] === '8') || (pieceToMove.color === 'b' && selectedSquare[1] === '2' && square[1] === '1'))) {
-                    setPromotionMove(move);
-                } else {
-                    makeMove(move);
-                }
+            if (isPromotion) {
+                setPromotionChoice({ from: selectedSquare, to: square, color: game.turn() });
+                setSelectedSquare(null);
             } else {
-                 if (piece && piece.color === game.turn()) {
-                    playSound('select');
+                const moveSuccessful = performMove({ from: selectedSquare, to: square });
+                if (!moveSuccessful && pieceOnSquare && pieceOnSquare.color === game.turn()) {
                     setSelectedSquare(square);
-                    const moves = game.moves({ square, verbose: true }).map((m: any) => m.to);
-                    setPossibleMoves(moves);
-                } else {
+                } else if (!moveSuccessful) {
                     setSelectedSquare(null);
-                    setPossibleMoves([]);
                 }
             }
-        } else if (piece && piece.color === game.turn()) {
+        } else if (pieceOnSquare && pieceOnSquare.color === game.turn()) {
+            const myColor = gameMode === 'online' ? (playerSymbol === 'X' ? 'w' : 'b') : (aiPlayerColor === 'w' ? 'b' : 'w');
+            if ((gameMode === 'ai' || gameMode === 'online') && game.turn() !== myColor) return;
+            
             playSound('select');
             setSelectedSquare(square);
-            const moves = game.moves({ square, verbose: true }).map((m: any) => m.to);
-            setPossibleMoves(moves);
-        }
-    }, [game, gameMode, myTurn, selectedSquare, makeMove, playSound]);
-    
-    const handlePromotion = (pieceType: PieceType) => {
-        if (promotionMove) {
-            makeMove({ ...promotionMove, promotion: pieceType });
         }
     };
     
-    const resetLocalGame = () => {
-        playSound('select');
-        const newGame = new ChessJS();
-        setGame(newGame);
-        setSelectedSquare(null);
-        setPossibleMoves([]);
-        setPromotionMove(null);
+    const handlePromotionSelect = (piece: string) => {
+        if (!promotionChoice) return;
+        performMove({ from: promotionChoice.from, to: promotionChoice.to, promotion: piece });
+        setPromotionChoice(null);
     };
+
+    useEffect(() => {
+        if (gameMode === 'online' && onlineGameState && onlineGameState.fen !== prevOnlineFen.current && onlineGameState.fen !== fen) {
+            prevOnlineFen.current = onlineGameState.fen;
     
-    // --- Render Functions ---
-    const getStatusMessage = () => {
-        if (game.game_over()) {
-            if (game.in_checkmate()) return `Skakmat! ${game.turn() === 'w' ? 'Hitam' : 'Putih'} menang.`;
-            if (game.in_draw()) return "Seri!";
-            if (game.in_stalemate()) return "Stalemate!";
-            if (game.in_threefold_repetition()) return "Seri karena pengulangan tiga kali!";
-        }
-        if (gameMode === 'online' && onlineGameState) {
-            if (onlineGameState.winner) {
-                 if (onlineGameState.winner === 'Draw') return "Game Selesai: Seri!";
-                 const winnerName = onlineGameState.players[onlineGameState.winner as Player]?.name;
-                 return `Game Selesai: ${onlineGameState.winner === playerSymbol ? 'Kamu menang!' : `${winnerName || 'Lawan'} menang!`}`;
+            const newGame = new Chess(onlineGameState.fen);
+    
+            // Play sound based on the new state provided by the opponent
+            if (onlineGameState.lastMove && !newGame.game_over()) {
+                if (newGame.in_check()) {
+                    playSound('check');
+                } else {
+                    // To detect a capture, inspect the last move in the game's history.
+                    const history = newGame.history({ verbose: true });
+                    const lastHistoryMove = history[history.length - 1];
+                    if (lastHistoryMove && (lastHistoryMove.flags.includes('c') || lastHistoryMove.flags.includes('e'))) {
+                        playSound('capture');
+                    } else {
+                        playSound('place');
+                    }
+                }
             }
-            return myTurn ? "Giliranmu" : `Menunggu ${onlineGameState.players[onlineGameState.currentPlayer]?.name || 'lawan'}`;
+    
+            setGame(newGame);
+            setFen(newGame.fen());
+            setLastMoveHighlight(onlineGameState.lastMove);
+            updateGameStatus(newGame);
         }
-        return `Giliran: ${game.turn() === 'w' ? 'Putih' : 'Hitam'}`;
+    }, [onlineGameState, gameMode, fen, playSound, updateGameStatus]);
+
+    const resetGame = (playerColor?: 'w' | 'b') => {
+        const newGame = new Chess();
+        setGame(newGame);
+        setFen(newGame.fen());
+        setWinner(null);
+        setSelectedSquare(null);
+        setLastMoveHighlight(null);
+        if (gameMode === 'ai') {
+            const aiColor = playerColor === 'w' ? 'b' : 'w';
+            setAiPlayerColor(aiColor);
+            if (aiColor === 'w') {
+                setTimeout(() => fetchAiMove(newGame.fen()), 500);
+            }
+        }
+    };
+
+    const handleAiRematch = () => {
+        playSound('select');
+        resetGame(aiPlayerColor === 'w' ? 'b' : 'w');
     };
 
     const renderBoard = () => {
-        const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
-        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-        if (isFlipped) {
-            ranks.reverse();
-            files.reverse();
+        const board = [];
+        const ranks = boardFlipped ? '12345678' : '87654321';
+        const files = boardFlipped ? 'hgfedcba' : 'abcdefgh';
+
+        for (let r = 0; r < 8; r++) {
+            for (let f = 0; f < 8; f++) {
+                const squareName = `${files[f]}${ranks[r]}`;
+                const piece = game.get(squareName);
+                const isLight = (r + f) % 2 !== 0;
+
+                board.push(
+                    <div
+                        key={squareName}
+                        className={`chess-square ${isLight ? 'light' : 'dark'} ${selectedSquare === squareName ? 'selected' : ''}`}
+                        onClick={() => handleSquareClick(squareName)}
+                    >
+                        {lastMoveHighlight?.from === squareName && <div className="square-overlay highlight-move" />}
+                        {lastMoveHighlight?.to === squareName && <div className="square-overlay highlight-move" />}
+                        {kingInCheck === squareName && <div className="square-overlay check" />}
+                        
+                        {piece && (
+                            <div className="chess-piece-container">
+                                <PieceComponent piece={piece} pieceStyle={pieceStyle} />
+                            </div>
+                        )}
+
+                        {possibleMoves.includes(squareName) && (
+                            <div className="square-overlay possible-move">
+                                {game.get(squareName) ? <div className="capture-ring" /> : <div className="move-dot" />}
+                            </div>
+                        )}
+                    </div>
+                );
+            }
         }
-
-        const flatBoard = board.flat();
-        if (isFlipped) {
-            flatBoard.reverse();
-        }
-
-        return (
-            <div className="board-layout-wrapper">
-                 <div className="board-ranks">
-                    {ranks.map(r => <div key={r}>{r}</div>)}
-                </div>
-                <div className="board-files">
-                    {files.map(f => <div key={f}>{f}</div>)}
-                </div>
-                <div className="chess-board-grid">
-                    {flatBoard.map((squareInfo) => {
-                        const { square, piece } = squareInfo;
-                        const rank = parseInt(square[1], 10) -1;
-                        const file = square.charCodeAt(0) - 'a'.charCodeAt(0);
-
-                        const isLight = (rank + file) % 2 !== 0;
-                        const isSelected = square === selectedSquare;
-                        const isPossible = possibleMoves.includes(square);
-                        const lastHistoryMove = gameMode !== 'online' && game.history({verbose:true}).length > 0 ? game.history({verbose:true}).slice(-1)[0] : null;
-                        const isLastMove = (gameMode === 'online' && (square === onlineGameState?.lastMove?.from || square === onlineGameState?.lastMove?.to)) ||
-                                           (gameMode !== 'online' && lastHistoryMove && (square === lastHistoryMove.from || square === lastHistoryMove.to));
-                        const isCheck = square === kingInCheckSquare;
-
-                        return (
-                            <SquareComponent
-                                key={square}
-                                square={square}
-                                piece={piece}
-                                pieceOnSquare={game.get(square)}
-                                isLight={isLight}
-                                isSelected={isSelected}
-                                isPossible={isPossible}
-                                isLastMove={isLastMove}
-                                isCheck={isCheck}
-                                onClick={handleSquareClick}
-                            />
-                        );
-                    })}
-                </div>
-            </div>
-        );
+        return board;
     };
 
-    const CapturedPiecesDisplay: React.FC<{ pieces: Piece[] }> = ({ pieces }) => (
-      <div className="captured-pieces-container">
-        {pieces.map((p, i) => (
-            <span key={i} className={`captured-piece ${p.color === 'w' ? 'white' : 'black'}`}>
-                {UNICODE_PIECES[p.color][p.type]}
-            </span>
-        ))}
-      </div>
-    );
-    
-    const PromotionChoice: React.FC<{ onPromote: (p: PieceType) => void, color: PieceColor }> = ({ onPromote, color }) => (
-      <div className="promotion-overlay">
-        <div className="promotion-box">
-          {(['q', 'r', 'b', 'n'] as PieceType[]).map(p => (
-            <div key={p} className="promotion-piece-choice" onClick={() => onPromote(p)}>
-               <span className={`chess-piece large ${color === 'w' ? 'white' : 'black'}`}>
-                 {UNICODE_PIECES[color][p]}
-               </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-
-    const renderOnlineContent = () => {
-        if (onlineStep !== 'game') {
-            return <OnlineGameSetup {...{ onlineStep, playerProfile, roomInputRef, handleProfileSubmit, handleEnterRoom, isLoading, error, handleChangeProfileRequest }} />;
+    const getStatusMessage = () => {
+        if (winner) return winner === 'Draw' ? 'Hasilnya Seri!' : `Pemain ${winner} Menang!`;
+        if (gameMode === 'ai') {
+            if (isAiThinking) return 'AI sedang berpikir...';
+            return game.turn() === aiPlayerColor ? 'Giliran AI' : 'Giliranmu';
         }
+        if (gameMode === 'online' && onlineGameState && playerSymbol) {
+            const myColor = playerSymbol === 'X' ? 'w' : 'b';
+            if (game.turn() === myColor) return 'Giliranmu';
+            return `Menunggu ${onlineGameState.players[playerSymbol === 'X' ? 'O' : 'X']?.name || 'Lawan'}`;
+        }
+        return `Giliran ${game.turn() === 'w' ? 'Putih' : 'Hitam'}`;
+    };
+    
+    const renderOnlineContent = () => {
+        if (onlineStep !== 'game') return <OnlineGameSetup {...{ onlineStep, playerProfile, roomInputRef, handleProfileSubmit, handleEnterRoom, isLoading, error, handleChangeProfileRequest }} />;
         if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
         if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
-        
-        const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
-        const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
 
-        const PlayerInfoBar: React.FC<{playerData: OnlinePlayer | null, capturedColor: PieceColor}> = ({playerData, capturedColor}) => (
-           <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center position-relative chess-player-bar">
-                <PlayerDisplay player={playerData} />
-                <CapturedPiecesDisplay pieces={capturedPieces[capturedColor]} />
-           </div>
-        );
+        const mySymbol = playerSymbol!;
+        const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
+        const myColor = mySymbol === 'X' ? 'w' : 'b';
+        const opponentColor = opponentSymbol === 'X' ? 'w' : 'b';
 
-        const opponentSymbol = playerSymbol === 'X' ? 'O' : 'X';
-        const topPlayerCapturedColor = myColor;
-        const bottomPlayerCapturedColor = myColor === 'w' ? 'b' : 'w';
+        const { capturedByWhite, capturedByBlack } = getCapturedPieces(game);
+        const myCaptured = myColor === 'w' ? capturedByBlack : capturedByWhite;
+        const opponentCaptured = opponentColor === 'w' ? capturedByBlack : capturedByWhite;
+
+        const isMyTurn = !winner && game.turn() === myColor;
 
         return (
-            <div className="d-flex flex-column align-items-center gap-3 w-100 position-relative" style={{ maxWidth: '720px'}}>
-              {promotionMove && <PromotionChoice onPromote={handlePromotion} color={game.get(promotionMove.from)!.color} />}
-              <PlayerInfoBar playerData={onlineGameState.players[opponentSymbol]} capturedColor={topPlayerCapturedColor} />
-              {renderBoard()}
-              <PlayerInfoBar playerData={onlineGameState.players[playerSymbol!]} capturedColor={bottomPlayerCapturedColor} />
-              <p className={`mt-2 fs-5 fw-semibold ${game.game_over() || onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
-              
-              <InGameMessageDisplay
-                  messages={onlineGameState.chatMessages}
-                  players={onlineGameState.players}
-                  myPlayerSymbol={playerSymbol}
-              />
-              <ChatAndEmotePanel onSendMessage={sendChatMessage} disabled={!myTurn} />
-
-              {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
-            </div>
+            <OnlineGameWrapper
+                myPlayer={onlineGameState.players[mySymbol]}
+                opponent={onlineGameState.players[opponentSymbol]}
+                mySymbol={mySymbol}
+                roomId={roomId}
+                statusMessage={getStatusMessage()}
+                isMyTurn={isMyTurn}
+                isGameOver={!!onlineGameState.winner || !!winner}
+                rematchCount={(onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0)}
+                amIReadyForRematch={!!(playerSymbol && onlineGameState.rematch[playerSymbol])}
+                onRematch={handleOnlineRematch}
+                chatMessages={onlineGameState.chatMessages}
+                onSendMessage={sendChatMessage}
+                opponentSideContent={<ChessPlayerBar player={onlineGameState.players[opponentSymbol]} capturedPieces={opponentCaptured} isMyTurn={game.turn() === opponentColor && !winner} />}
+                mySideContent={<ChessPlayerBar player={onlineGameState.players[mySymbol]} capturedPieces={myCaptured} isMyTurn={game.turn() === myColor && !winner} />}
+            >
+                <div className="board-layout-wrapper">
+                    <div className="board-ranks">{[... (boardFlipped ? '12345678' : '87654321')].map(r => <span key={r}>{r}</span>)}</div>
+                    <div className="board-files">{[... (boardFlipped ? 'hgfedcba' : 'abcdefgh')].map(f => <span key={f}>{f}</span>)}</div>
+                    <div className="chess-board-grid">
+                        {renderBoard()}
+                        {promotionChoice && (
+                            <div className="promotion-overlay">
+                                <div className="promotion-box">
+                                    {['q', 'r', 'b', 'n'].map(p_type => (
+                                        <div key={p_type} className="promotion-piece-choice" onClick={() => handlePromotionSelect(p_type)}>
+                                            <PieceComponent piece={{ type: p_type, color: promotionChoice.color }} pieceStyle={pieceStyle} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                 </div>
+            </OnlineGameWrapper>
         );
     };
     
     const renderContent = () => {
-        switch (gameMode) {
-            case 'menu':
-                return <GameModeSelector title="Catur" description={description} changeGameMode={changeGameMode} />;
-            case 'local':
-                return (
-                    <div className="d-flex flex-column align-items-center gap-3 w-100" style={{ maxWidth: '720px'}}>
-                        {promotionMove && <PromotionChoice onPromote={handlePromotion} color={game.get(promotionMove.from)!.color} />}
-                        <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center chess-player-bar">
-                          <p className="m-0 fw-bold text-start">Pion Hitam (Tertangkap)</p>
-                          <CapturedPiecesDisplay pieces={capturedPieces.b} />
-                        </div>
-                        {renderBoard()}
-                        <div className="w-100 p-2 bg-secondary rounded d-flex justify-content-between align-items-center chess-player-bar">
-                           <p className="m-0 fw-bold text-start">Pion Putih (Tertangkap)</p>
-                           <CapturedPiecesDisplay pieces={capturedPieces.w} />
-                        </div>
-                        <p className={`mt-2 fs-5 fw-semibold ${game.game_over() ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
-                        {game.game_over() && <button onClick={resetLocalGame} className="btn btn-primary btn-lg">Main Lagi</button>}
+        if (gameMode === 'ai' && !aiPlayerColor) {
+            return (
+                <div className="text-center">
+                    <h3 className="mb-4">Pilih Warnamu</h3>
+                    <div className="d-grid gap-3 col-6 mx-auto">
+                        <button onClick={() => resetGame('w')} className="btn btn-light btn-lg">Putih</button>
+                        <button onClick={() => resetGame('b')} className="btn btn-dark btn-lg">Hitam</button>
                     </div>
-                );
-            case 'online': return renderOnlineContent();
+                </div>
+            );
         }
+
+        if (gameMode === 'online') {
+            return renderOnlineContent();
+        }
+        
+        return (
+            <div className="d-flex flex-column align-items-center">
+                 <p className="fs-4 fw-semibold mb-3">{getStatusMessage()}</p>
+                 <div className="board-layout-wrapper">
+                    <div className="board-ranks">{[... (boardFlipped ? '12345678' : '87654321')].map(r => <span key={r}>{r}</span>)}</div>
+                    <div className="board-files">{[... (boardFlipped ? 'hgfedcba' : 'abcdefgh')].map(f => <span key={f}>{f}</span>)}</div>
+                    <div className="chess-board-grid">
+                        {renderBoard()}
+                        {promotionChoice && (
+                            <div className="promotion-overlay">
+                                <div className="promotion-box">
+                                    {['q', 'r', 'b', 'n'].map(p_type => (
+                                        <div key={p_type} className="promotion-piece-choice" onClick={() => handlePromotionSelect(p_type)}>
+                                            <PieceComponent piece={{ type: p_type, color: promotionChoice.color }} pieceStyle={pieceStyle} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                 </div>
+                 <div className="d-flex justify-content-center align-items-center gap-4 mt-3">
+                    {winner && <button onClick={gameMode === 'ai' ? handleAiRematch : () => resetGame()} className="btn btn-primary">Main Lagi</button>}
+                    <div className="btn-group">
+                        <button className={`btn btn-sm ${pieceStyle === 'unicode' ? 'btn-info' : 'btn-outline-info'}`} onClick={() => { setPieceStyle('unicode'); localStorage.setItem('chessPieceStyle', 'unicode'); }}>Aa</button>
+                        <button className={`btn btn-sm ${pieceStyle === 'fa' ? 'btn-info' : 'btn-outline-info'}`} onClick={() => { setPieceStyle('fa'); localStorage.setItem('chessPieceStyle', 'fa'); }}><i className="fas fa-chess-knight"></i></button>
+                    </div>
+                 </div>
+            </div>
+        );
     };
 
     return (
         <div className="d-flex flex-column align-items-center justify-content-center position-relative" style={{ minHeight: '80vh' }}>
-            <BackButton onClick={gameMode === 'menu' ? onBackToMenu : () => changeGameMode('menu')} />
-            
-            {gameMode !== 'menu' && (
-                <div className="text-center mb-4">
+            <BackButton onClick={gameMode === 'menu' ? onBackToMenu : () => { changeGameMode('menu'); setAiPlayerColor(null); }} />
+            <div className="text-center mb-4">
+                {gameMode !== 'menu' && (
                     <div className="d-flex justify-content-center align-items-center gap-3">
                         <h2 className="display-5 fw-bold text-white mb-0">Catur</h2>
-                        <button onClick={() => setShowRules(true)} className="btn btn-sm btn-outline-secondary" aria-label="Tampilkan Aturan">Aturan</button>
+                        <button onClick={() => setShowRules(true)} className="btn btn-sm btn-outline-secondary">Aturan</button>
                     </div>
-                </div>
-            )}
-
-            {renderContent()}
-
-            <RulesModal title="Aturan Dasar Catur" show={showRules} onClose={() => setShowRules(false)}>
-                <p>Tujuan utama catur adalah untuk melakukan sekakmat (checkmate) terhadap raja lawan.</p>
-                <ul className="list-unstyled ps-3">
-                    <li><strong>- Sekakmat:</strong> Situasi di mana raja lawan sedang diserang (dalam keadaan 'sekak') dan tidak bisa melarikan diri dari serangan tersebut.</li>
-                    <li><strong>- Setiap bidak memiliki cara bergerak yang unik:</strong>
-                        <ul className="list-unstyled ps-4">
-                            <li><strong>Raja (King):</strong> Bergerak satu kotak ke segala arah.</li>
-                            <li><strong>Ratu (Queen):</strong> Bergerak lurus ke segala arah (horizontal, vertikal, diagonal) dengan jarak tak terbatas.</li>
-                            <li><strong>Benteng (Rook):</strong> Bergerak lurus secara horizontal atau vertikal dengan jarak tak terbatas.</li>
-                            <li><strong>Gajah (Bishop):</strong> Bergerak lurus secara diagonal dengan jarak tak terbatas.</li>
-                            <li><strong>Kuda (Knight):</strong> Bergerak dalam bentuk "L" (dua kotak lurus, lalu satu kotak ke samping). Kuda adalah satu-satunya bidak yang bisa melompati bidak lain.</li>
-                            <li><strong>Pion (Pawn):</strong> Bergerak maju satu kotak. Pada langkah pertamanya, pion bisa maju dua kotak. Pion memakan bidak lawan secara diagonal satu kotak ke depan.</li>
-                        </ul>
-                    </li>
-                    <li><strong>- Promosi:</strong> Jika pion berhasil mencapai baris terakhir papan, pion dapat dipromosikan menjadi Ratu, Benteng, Gajah, atau Kuda.</li>
-                    <li><strong>- Seri (Draw):</strong> Permainan bisa berakhir seri dalam beberapa kondisi, seperti stalemate (raja tidak dalam sekak tapi tidak bisa bergerak), atau pengulangan posisi tiga kali.</li>
-                </ul>
+                )}
+            </div>
+            {gameMode === 'menu' ? <GameModeSelector title="Catur" description={description} changeGameMode={changeGameMode} /> : renderContent()}
+            <RulesModal title="Aturan Catur" show={showRules} onClose={() => setShowRules(false)}>
+              <p>Tujuan dari permainan ini adalah untuk melakukan sekakmat pada raja lawan. Sekakmat terjadi ketika raja berada dalam posisi untuk ditangkap (dalam 'sekak') dan tidak ada cara untuk menghindar dari penangkapan.</p>
             </RulesModal>
         </div>
     );
 };
 
-export default Chess;
+export default ChessGame;

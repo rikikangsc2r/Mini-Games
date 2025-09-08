@@ -94,6 +94,7 @@
 
       /* Chess Game Styles */
       .board-layout-wrapper {
+        position: relative; /* Needed for absolute positioning of animating piece */
         display: grid;
         grid-template-areas:
           "ranks board"
@@ -123,6 +124,7 @@
         padding-top: 8px;
       }
       .chess-board-grid {
+        position: relative; /* Added for correct child absolute positioning */
         grid-area: board;
         display: grid;
         grid-template-columns: repeat(8, 1fr);
@@ -140,27 +142,40 @@
         justify-content: center;
         align-items: center;
         cursor: pointer;
-        transition: background-color 0.1s ease;
       }
       .chess-square.light { background-color: #f0d9b5; }
       .chess-square.dark { background-color: #b58863; }
 
       /* Chess Piece Styles */
+      .chess-piece-container {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
       .chess-piece {
         font-size: clamp(28px, 9.5vmin, 50px);
-        text-shadow: 0 2px 4px rgba(0,0,0,0.6);
         line-height: 1;
         z-index: 10;
-        pointer-events: none; /* Let clicks go through to the square */
+        pointer-events: none;
         transform: scale(1);
         transition: transform 0.1s ease-in-out;
       }
-       .chess-square.selected .chess-piece {
-        transform: scale(1.1);
-      }
-      .chess-piece.white { color: #f8f9fa; }
-      .chess-piece.black { color: #212529; }
+      .chess-piece.white { color: #f8f9fa; text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 1px rgba(0,0,0,1); }
+      .chess-piece.black { color: #212529; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
       .chess-piece.large { font-size: clamp(40px, 12vmin, 60px); }
+
+      /* Animating Piece */
+      .animating-piece {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 12.5%; /* 100% / 8 squares */
+        height: 12.5%;
+        z-index: 100;
+        pointer-events: none;
+      }
 
       /* Square Overlay Styles */
       .square-overlay {
@@ -170,7 +185,7 @@
         z-index: 5;
         pointer-events: none;
       }
-      .last-move { background-color: rgba(255, 235, 59, 0.4); }
+      .highlight-move { background-color: rgba(25, 135, 84, 0.5); }
       .selected { box-shadow: inset 0 0 0 4px #16a34a; }
       .check { background: radial-gradient(circle, rgba(220,53,69,0.7) 0%, rgba(220,53,69,0) 75%); }
       
@@ -205,7 +220,7 @@
         font-size: 20px;
         line-height: 1;
       }
-      .captured-piece.white { color: #f8f9fa; }
+      .captured-piece.white { color: #f8f9fa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
       .captured-piece.black { color: #212529; }
 
 
@@ -218,7 +233,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        z-index: 100;
+        z-index: 200; /* Increased z-index */
       }
       .promotion-box {
         background-color: #495057;

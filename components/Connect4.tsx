@@ -10,6 +10,7 @@ import GameLobby from './GameLobby';
 import GameModeSelector from './GameModeSelector';
 import ChatAndEmotePanel from './ChatAndEmotePanel';
 import InGameMessageDisplay from './InGameMessageDisplay';
+import OnlineGameWrapper from './OnlineGameWrapper';
 
 // --- Global Declarations ---
 declare const firebase: any;
@@ -94,12 +95,14 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
         handleRematch, changeGameMode, handleChangeProfileRequest, sendChatMessage,
     } = useOnlineGame('connect4-games', createInitialOnlineState, reconstructOnlineState, getRematchState, onBackToMenu);
 
-    // Local game state
+    // Local & AI game state
     const [board, setBoard] = useState<BoardState>(createInitialBoard);
     const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
     const [winner, setWinner] = useState<Player | 'Draw' | null>(null);
     const [winningLine, setWinningLine] = useState<{ r: number; c: number }[]>([]);
     const [showRules, setShowRules] = useState(false);
+    const [isAiThinking, setIsAiThinking] = useState(false);
+    const [aiStarts, setAiStarts] = useState(false);
 
 
     const checkWinner = useCallback((currentBoard: BoardState): WinningInfo | null => {
@@ -146,60 +149,188 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
         return null;
     }, []);
 
+    const dropPiece = (boardState: BoardState, c: number, player: Player): { newBoard: BoardState; success: boolean } => {
+        if (boardState[0][c]) return { newBoard: boardState, success: false };
+        const newBoard = boardState.map(row => [...row]);
+        for (let r = ROWS - 1; r >= 0; r--) {
+            if (!newBoard[r][c]) {
+                newBoard[r][c] = player;
+                return { newBoard, success: true };
+            }
+        }
+        return { newBoard: boardState, success: false };
+    };
+
     const handleColumnClick = (c: number) => {
-        if (gameMode === 'local') {
-            if (winner || board[0][c]) return;
-            playSound('place');
-            const newBoard = board.map(row => [...row]);
-            for (let r = ROWS - 1; r >= 0; r--) {
-                if (!newBoard[r][c]) {
-                    newBoard[r][c] = currentPlayer;
-                    break;
-                }
-            }
-            setBoard(newBoard);
-            const result = checkWinner(newBoard);
-            if (result) {
-                if (result.winner === 'Draw') playSound('draw'); else playSound('win');
-                setWinner(result.winner);
-                setWinningLine(result.line);
-            } else {
-                setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
-            }
-        } else if (gameMode === 'online' && onlineGameState) {
-            if (onlineGameState.winner || onlineGameState.board[0][c] || onlineGameState.currentPlayer !== playerSymbol) return;
-            playSound('place');
-            const newBoard = onlineGameState.board.map(row => [...row]);
-            for (let r = ROWS - 1; r >= 0; r--) {
-                if (!newBoard[r][c]) {
-                    newBoard[r][c] = onlineGameState.currentPlayer;
-                    break;
-                }
-            }
-            const result = checkWinner(newBoard);
-            const updates: Partial<Pick<OnlineGameState, 'board' | 'currentPlayer' | 'winner' | 'winningLine'>> = {
-                board: newBoard,
-                currentPlayer: onlineGameState.currentPlayer === 'X' ? 'O' : 'X',
-            };
-            if (result) {
-                updates.winner = result.winner;
-                updates.winningLine = result.line;
-            }
-            db.ref(`connect4-games/${roomId}`).update(updates);
+        const isAiTurn = gameMode === 'ai' && currentPlayer === 'O';
+        if (winner || board[0][c] || isAiTurn) return;
+        
+        playSound('place');
+        const { newBoard } = dropPiece(board, c, currentPlayer);
+        
+        setBoard(newBoard);
+        const result = checkWinner(newBoard);
+        if (result) {
+            if (result.winner === 'Draw') playSound('draw'); else playSound('win');
+            setWinner(result.winner);
+            setWinningLine(result.line);
+        } else {
+            setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
         }
     };
     
-    const resetLocalGame = () => {
+    const handleOnlineColumnClick = (c: number) => {
+        if (!onlineGameState || onlineGameState.winner || onlineGameState.board[0][c] || onlineGameState.currentPlayer !== playerSymbol) return;
+        playSound('place');
+        const { newBoard } = dropPiece(onlineGameState.board, c, onlineGameState.currentPlayer);
+        
+        const result = checkWinner(newBoard);
+        const updates: Partial<Pick<OnlineGameState, 'board' | 'currentPlayer' | 'winner' | 'winningLine'>> = {
+            board: newBoard,
+            currentPlayer: onlineGameState.currentPlayer === 'X' ? 'O' : 'X',
+        };
+        if (result) {
+            updates.winner = result.winner;
+            updates.winningLine = result.line;
+        }
+        db.ref(`connect4-games/${roomId}`).update(updates);
+    };
+
+     // --- AI Logic ---
+    const evaluateWindow = useCallback((window: (Player | null)[], piece: Player) => {
+        let score = 0;
+        const opponent = piece === 'X' ? 'O' : 'X';
+        const pieceCount = window.filter(p => p === piece).length;
+        const opponentCount = window.filter(p => p === opponent).length;
+        const emptyCount = window.filter(p => p === null).length;
+
+        if (pieceCount === 4) score += 100;
+        else if (pieceCount === 3 && emptyCount === 1) score += 5;
+        else if (pieceCount === 2 && emptyCount === 2) score += 2;
+        if (opponentCount === 3 && emptyCount === 1) score -= 80; // Block opponent's win is high priority
+
+        return score;
+    }, []);
+
+    const scorePosition = useCallback((boardState: BoardState, piece: Player) => {
+        let score = 0;
+        const centerArray = boardState.map(row => row[Math.floor(COLS / 2)]);
+        score += centerArray.filter(p => p === piece).length * 3;
+
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c <= COLS - 4; c++) {
+                score += evaluateWindow(boardState[r].slice(c, c + 4), piece);
+            }
+        }
+        for (let c = 0; c < COLS; c++) {
+            for (let r = 0; r <= ROWS - 4; r++) {
+                score += evaluateWindow([boardState[r][c], boardState[r+1][c], boardState[r+2][c], boardState[r+3][c]], piece);
+            }
+        }
+        for (let r = 0; r <= ROWS - 4; r++) {
+            for (let c = 0; c <= COLS - 4; c++) {
+                score += evaluateWindow([boardState[r][c], boardState[r+1][c+1], boardState[r+2][c+2], boardState[r+3][c+3]], piece);
+                score += evaluateWindow([boardState[r+3][c], boardState[r+2][c+1], boardState[r+1][c+2], boardState[r][c+3]], piece);
+            }
+        }
+        return score;
+    }, [evaluateWindow]);
+
+    const minimax = useCallback((boardState: BoardState, depth: number, alpha: number, beta: number, maximizingPlayer: boolean): { score: number, column: number | null } => {
+        const winnerInfo = checkWinner(boardState);
+        if (winnerInfo) {
+            if (winnerInfo.winner === 'O') return { score: 100000 - depth, column: null };
+            if (winnerInfo.winner === 'X') return { score: -100000 + depth, column: null };
+            return { score: 0, column: null };
+        }
+        if (depth === 0) return { score: scorePosition(boardState, 'O'), column: null };
+
+        const validColumns = [3, 2, 4, 1, 5, 0, 6].filter(c => !boardState[0][c]);
+
+        if (maximizingPlayer) {
+            let value = -Infinity;
+            let column = validColumns[0] ?? null;
+            for (const c of validColumns) {
+                const { newBoard } = dropPiece(boardState, c, 'O');
+                const newScore = minimax(newBoard, depth - 1, alpha, beta, false).score;
+                if (newScore > value) {
+                    value = newScore;
+                    column = c;
+                }
+                alpha = Math.max(alpha, value);
+                if (alpha >= beta) break;
+            }
+            return { score: value, column };
+        } else {
+            let value = Infinity;
+            let column = validColumns[0] ?? null;
+            for (const c of validColumns) {
+                const { newBoard } = dropPiece(boardState, c, 'X');
+                const newScore = minimax(newBoard, depth - 1, alpha, beta, true).score;
+                if (newScore < value) {
+                    value = newScore;
+                    column = c;
+                }
+                beta = Math.min(beta, value);
+                if (alpha >= beta) break;
+            }
+            return { score: value, column };
+        }
+    }, [checkWinner, scorePosition, dropPiece]);
+
+    useEffect(() => {
+        if (gameMode === 'ai' && currentPlayer === 'O' && !winner) {
+            setIsAiThinking(true);
+            const timer = setTimeout(() => {
+                const { column } = minimax(board, 4, -Infinity, Infinity, true); // Depth 4
+                if (column !== null) {
+                    playSound('place');
+                    const { newBoard } = dropPiece(board, column, 'O');
+                    setBoard(newBoard);
+                    const result = checkWinner(newBoard);
+                    if (result) {
+                        if (result.winner === 'Draw') playSound('draw'); else playSound('win');
+                        setWinner(result.winner);
+                        setWinningLine(result.line);
+                    } else {
+                        setCurrentPlayer('X');
+                    }
+                }
+                setIsAiThinking(false);
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [gameMode, currentPlayer, winner, board, minimax, playSound, checkWinner, dropPiece]);
+    
+    const resetGame = () => {
         playSound('select');
         setBoard(createInitialBoard());
         setCurrentPlayer('X');
         setWinner(null);
         setWinningLine([]);
     };
+    
+    const handleAiRematch = () => {
+        playSound('select');
+        const newAiStarts = !aiStarts;
+        setAiStarts(newAiStarts);
+        setBoard(createInitialBoard());
+        setCurrentPlayer(newAiStarts ? 'O' : 'X');
+        setWinner(null);
+        setWinningLine([]);
+    };
 
     const getStatusMessage = () => {
-        if (gameMode === 'local') {
-            if (winner) return winner === 'Draw' ? "Hasilnya Seri!" : `Pemain ${winner} Menang!`;
+        if (gameMode === 'local' || gameMode === 'ai') {
+            if (winner) {
+                if (winner === 'Draw') return "Hasilnya Seri!";
+                if (gameMode === 'ai') return winner === 'X' ? 'Kamu Menang!' : 'AI Menang!';
+                return `Pemain ${winner} Menang!`;
+            }
+            if (gameMode === 'ai') {
+                if (isAiThinking) return 'AI sedang berpikir...';
+                return currentPlayer === 'X' ? 'Giliranmu' : 'Giliran AI';
+            }
             return `Giliran Pemain ${currentPlayer}`;
         }
         if (onlineGameState) {
@@ -229,6 +360,9 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
             cx: c * 100 + 50,
             cy: r * 100 + 50,
         });
+        
+        const handleClick = gameMode === 'online' ? handleOnlineColumnClick : handleColumnClick;
+        const isInteractive = (gameMode === 'online' && isTurn) || (gameMode !== 'online' && !isGameOver);
 
         return (
             <div className="connect4-container">
@@ -292,8 +426,8 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
                     {Array.from({ length: COLS }).map((_, c) => (
                         <div
                             key={`col-${c}`}
-                            className={`connect4-interactive-col ${(!isTurn || isGameOver || boardToRender[0][c]) ? 'disabled' : ''}`}
-                            onClick={() => handleColumnClick(c)}
+                            className={`connect4-interactive-col ${(!isInteractive || boardToRender[0][c]) ? 'disabled' : ''}`}
+                            onClick={() => handleClick(c)}
                             role="button"
                             aria-label={`Jatuhkan bidak di kolom ${c + 1}`}
                         />
@@ -310,31 +444,32 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
         if (!onlineGameState) return <div className="text-center"><div className="spinner-border text-info"></div><p className="mt-3">Memuat game...</p></div>;
         if (!onlineGameState.players.O) return <GameLobby roomId={roomId} />;
 
+        const mySymbol = playerSymbol!;
+        const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
         const isMyTurn = onlineGameState.currentPlayer === playerSymbol && !onlineGameState.winner;
-        const rematchCount = (onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0);
-        const amIReadyForRematch = playerSymbol && onlineGameState.rematch[playerSymbol];
-        return (
-            <div className="text-center w-100 position-relative d-flex flex-column align-items-center">
-                <div className="mb-4 d-flex flex-column align-items-center gap-3">
-                     <div className="d-flex justify-content-center align-items-center gap-3 w-100 position-relative player-display-container-responsive" style={{maxWidth: '450px'}}>
-                        <PlayerDisplay player={onlineGameState.players.X} />
-                        <span className="gradient-text fw-bolder fs-4">VS</span>
-                        <PlayerDisplay player={onlineGameState.players.O} />
-                        <InGameMessageDisplay
-                            messages={onlineGameState.chatMessages}
-                            players={onlineGameState.players}
-                            myPlayerSymbol={playerSymbol}
-                        />
-                    </div>
-                    <p className="text-muted mb-0">Room: {roomId}</p>
-                    <p className={`mt-2 fs-4 fw-semibold ${onlineGameState.winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p>
-                </div>
-                {renderGameBoard(onlineGameState.board, onlineGameState.winningLine, isMyTurn, !!onlineGameState.winner)}
-                
-                <ChatAndEmotePanel onSendMessage={sendChatMessage} disabled={!isMyTurn} />
 
-                {onlineGameState.winner && <button onClick={handleRematch} disabled={!!amIReadyForRematch} className="mt-4 btn btn-primary btn-lg">Rematch ({rematchCount}/2)</button>}
-            </div>
+        return (
+            <OnlineGameWrapper
+                myPlayer={onlineGameState.players[mySymbol]}
+                opponent={onlineGameState.players[opponentSymbol]}
+                mySymbol={mySymbol}
+                roomId={roomId}
+                statusMessage={getStatusMessage()}
+                isMyTurn={isMyTurn}
+                isGameOver={!!onlineGameState.winner}
+                rematchCount={(onlineGameState.rematch.X ? 1 : 0) + (onlineGameState.rematch.O ? 1 : 0)}
+                amIReadyForRematch={!!(playerSymbol && onlineGameState.rematch[playerSymbol])}
+                onRematch={handleRematch}
+                chatMessages={onlineGameState.chatMessages}
+                onSendMessage={sendChatMessage}
+            >
+                {renderGameBoard(
+                    onlineGameState.board,
+                    onlineGameState.winningLine,
+                    isMyTurn,
+                    !!onlineGameState.winner
+                )}
+            </OnlineGameWrapper>
         );
     };
     
@@ -347,7 +482,15 @@ const Connect4: React.FC<Connect4Props> = ({ onBackToMenu, description }) => {
                     <div className="text-center">
                         <div className="mb-4"><p className={`mt-3 fs-4 fw-semibold ${winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p></div>
                         {renderGameBoard(board, winningLine, true, !!winner)}
-                        {winner && <button onClick={resetLocalGame} className="mt-4 btn btn-primary btn-lg">Main Lagi</button>}
+                        {winner && <button onClick={resetGame} className="mt-4 btn btn-primary btn-lg">Main Lagi</button>}
+                    </div>
+                );
+            case 'ai':
+                return (
+                    <div className="text-center">
+                        <div className="mb-4"><p className={`mt-3 fs-4 fw-semibold ${winner ? 'text-success' : 'text-light'}`}>{getStatusMessage()}</p></div>
+                        {renderGameBoard(board, winningLine, !isAiThinking, !!winner)}
+                        {winner && <button onClick={handleAiRematch} className="mt-4 btn btn-primary btn-lg">Rematch</button>}
                     </div>
                 );
             case 'online': return renderOnlineContent();

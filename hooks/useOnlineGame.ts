@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Player } from '../types';
+import type { Player, GameMode } from '../types';
 import useSounds from '../components/useSounds';
 import { usePlayerStats, GameStatsID } from './usePlayerStats';
 
@@ -55,7 +55,6 @@ export interface BaseOnlineGameState {
     chatMessages: ChatMessage[];
 }
 
-export type GameMode = 'menu' | 'local' | 'online';
 export type OnlineStep = 'profile' | 'room' | 'game';
 
 const dbKeyToGameId = (dbKey: string): GameStatsID | null => {

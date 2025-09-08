@@ -83,7 +83,7 @@ const ChatAndEmotePanel: React.FC<ChatAndEmotePanelProps> = ({ onSendMessage, di
                 onClick={() => setIsPanelOpen(prev => !prev)}
                 aria-label="Buka obrolan dan emote"
             >
-                💬
+                <i className="fas fa-comment-dots"></i>
             </button>
         </div>
     );

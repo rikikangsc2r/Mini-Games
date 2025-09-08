@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 // Define the types of sounds the application can play.
-export type SoundName = 'place' | 'win' | 'draw' | 'select' | 'back' | 'notify';
+export type SoundName = 'place' | 'win' | 'draw' | 'select' | 'back' | 'notify' | 'check' | 'capture';
 
 // A single AudioContext is created and reused. It's initialized lazily on the first sound playback.
 let audioContext: AudioContext | null = null;
@@ -56,11 +56,17 @@ const playSoundEffect = (soundName: SoundName) => {
     case 'place':
       playTone(350, now, 0.1, 'triangle', 0.4);
       break;
+    case 'capture':
+      playTone(200, now, 0.15, 'square', 0.5);
+      break;
     case 'select':
       playTone(550, now, 0.1, 'sine', 0.3);
       break;
     case 'notify':
       playTone(880, now, 0.3, 'sine', 0.5);
+      break;
+    case 'check':
+      playTone(987.77, now, 0.15, 'square', 0.3); // B5 note for urgency
       break;
     case 'win':
       // Ascending arpeggio for a win

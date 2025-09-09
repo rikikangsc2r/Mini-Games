@@ -11,7 +11,6 @@ import TicTacToe from './components/TicTacToe';
 import GobbletGobblers from './components/GobbletGobblers';
 import Chess from './components/Chess';
 import Connect4 from './components/Connect4';
-import DrawingGame from './components/DrawingGame';
 import Footer from './components/Footer';
 import Blog from './components/Blog';
 import PlayerStats from './components/PlayerStats';
@@ -76,19 +75,6 @@ const Connect4Icon = () => (
     </svg>
 );
 
-const DrawingIcon = () => (
-  <svg viewBox="0 0 100 100">
-    <path d="M85,15 L90,20 L40,70 L30,70 L30,60 Z" fill="#ffc107" stroke="#343a40" strokeWidth="3" />
-    <path d="M30,70 L10,90 L10,80 L20,70 Z" fill="#f8f9fa" stroke="#343a40" strokeWidth="2" />
-    <path d="M35,65 L85,15" stroke="#343a40" strokeWidth="3" />
-    <path d="M15,85 L35,65" stroke="#343a40" strokeWidth="3" />
-    <rect x="30" y="60" width="10" height="10" fill="#dc3545" />
-    <circle cx="20" cy="20" r="8" fill="#0dcaf0" />
-    <circle cx="45" cy="15" r="8" fill="#198754" />
-    <circle cx="70" cy="30" r="8" fill="#dc3545" />
-  </svg>
-);
-
 
 const App: React.FC = () => {
   const [currentGame, setCurrentGame] = useState<GameID>('menu');
@@ -126,7 +112,6 @@ const App: React.FC = () => {
       case 'gobblet': document.title = 'Gobblet Gobblers Multiplayer | NkGame'; break;
       case 'chess': document.title = 'Catur (Chess) Multiplayer | NkGame'; break;
       case 'connect4': document.title = 'Connect 4 Multiplayer | NkGame'; break;
-      case 'drawing': document.title = 'Gambar Bareng Online | NkGame'; break;
       case 'stats': document.title = 'Statistik Pemain | NkGame'; break;
       case 'blog': document.title = 'Blog | NkGame'; break;
       default: document.title = 'NkGame - Koleksi Game Papan Online Multiplayer';
@@ -158,12 +143,6 @@ const App: React.FC = () => {
         description: "Jatuhkan cakram Anda dan jadilah yang pertama mendapatkan empat cakram berturut-turut. Bisakah Anda mengakali lawan?",
         icon: <Connect4Icon />,
     },
-    {
-        id: 'drawing' as GameID,
-        title: "Gambar Bareng",
-        description: "Berkolaborasi secara kreatif di kanvas bersama. Gambar, coret-coret, dan ciptakan karya seni dengan teman secara real-time.",
-        icon: <DrawingIcon />,
-    },
   ];
 
   const filteredGames = gamesList.filter(game =>
@@ -181,7 +160,6 @@ const App: React.FC = () => {
       case 'gobblet': return <GobbletGobblers onBackToMenu={handleBackToMenu} description={getGameDescription('gobblet')} />;
       case 'chess': return <Chess onBackToMenu={handleBackToMenu} description={getGameDescription('chess')} />;
       case 'connect4': return <Connect4 onBackToMenu={handleBackToMenu} description={getGameDescription('connect4')} />;
-      case 'drawing': return <DrawingGame onBackToMenu={handleBackToMenu} description={getGameDescription('drawing')} />;
       case 'stats': return <PlayerStats onBackToMenu={handleBackToMenu} />;
       case 'blog': return <Blog onBackToMenu={handleBackToMenu} />;
       default: return null;

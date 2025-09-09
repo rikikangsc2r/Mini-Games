@@ -2,7 +2,7 @@
   "rules": {
     // Apply a common set of security rules to all game types
     "$game_key": {
-      ".validate": "$game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'chess-games' || $game_key === 'connect4-games'",
+      ".validate": "$game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'chess-games' || $game_key === 'connect4-games' || $game_key === 'drawing-games'",
       
       "$room_id": {
         // Anyone can read a game's state. This is required for the "share room ID" feature to work.
@@ -120,6 +120,12 @@
         "lastMove": {
              ".validate": "($game_key === 'chess-games' || $game_key === 'gobblet-games') ? !newData.exists() || newData.val() === null || newData.hasChildren() : !newData.exists()"
         },
+        "paths": {
+            ".validate": "$game_key === 'drawing-games' ? !newData.exists() || newData.val() === null || newData.hasChildren() : !newData.exists()",
+            "$pathId": {
+                ".validate": "newData.hasChildren(['id', 'deviceId', 'color', 'size', 'points']) && newData.child('id').isString() && newData.child('deviceId').isString() && newData.child('color').isString() && newData.child('size').isNumber() && newData.child('points').hasChildren()"
+            }
+        },
 
         // Disallow any other unknown top-level properties
         "$other": {
@@ -127,7 +133,8 @@
             $other === 'players' || $other === 'createdAt' || $other === 'currentPlayer' ||
             $other === 'startingPlayer' || $other === 'rematch' || $other === 'winner' ||
             $other === 'board' || $other === 'winningLine' || $other === 'homePiles' ||
-            $other === 'fen' || $other === 'lastMove' || $other === 'chatMessages'
+            $other === 'fen' || $other === 'lastMove' || $other === 'chatMessages' ||
+            $other === 'paths'
           "
         }
       }

@@ -91,8 +91,7 @@
         },
 
         "chatMessages": {
-          // chatMessages is an optional list of messages.
-          ".validate": "!newData.exists() || newData.hasChildren()",
+          // chatMessages is an optional list of messages. Child validation will handle contents.
           "$messageIndex": {
             // Each message must have the correct structure.
             ".validate": "
@@ -109,7 +108,7 @@
             ".validate": "($game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'connect4-games') ? newData.exists() && newData.hasChildren() : !newData.exists()"
         },
         "winningLine": {
-             ".validate": "($game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'connect4-games') ? !newData.exists() || newData.hasChildren() : !newData.exists()"
+             ".validate": "($game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'connect4-games') ? true : !newData.exists()"
         },
         "homePiles": {
             ".validate": "$game_key === 'gobblet-games' ? newData.exists() && newData.hasChildren(['X', 'O']) : !newData.exists()"

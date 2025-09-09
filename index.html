@@ -29,6 +29,8 @@
       body {
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        background-color: #212529;
+        color: #f8f9fa;
       }
       .gradient-text {
         background-color: #495057;
@@ -156,6 +158,9 @@
         border-radius: 8px;
         transition: background-color 0.2s ease;
       }
+      .connect4-interactive-col:not(.disabled):hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
       .connect4-interactive-col.disabled {
         cursor: not-allowed;
       }
@@ -270,125 +275,118 @@
       .game-icon-container:hover {
         transform: translateY(-8px);
       }
-      .game-icon-container:hover .game-icon-title {
-        color: #0dcaf0; /* text-info */
-      }
       .game-icon-visual {
-        background-color: #343a40;
-        border-radius: 25%;
-        padding: 1rem;
+        width: 100%;
         aspect-ratio: 1 / 1;
+        background-color: #212529;
+        border-radius: 1.5rem;
+        padding: 1rem;
         display: flex;
         justify-content: center;
         align-items: center;
-        transition: box-shadow 0.2s ease-in-out;
-      }
-      .game-icon-container:hover .game-icon-visual {
-         box-shadow: 0 0.5rem 1.5rem rgba(13, 202, 240, 0.2) !important;
       }
       .game-icon-visual svg {
-         width: 100%;
-         height: auto;
-         max-height: 100%;
+        width: 100%;
+        height: 100%;
       }
       .game-icon-title {
-        color: #f8f9fa; /* text-light */
-        transition: color 0.2s ease-in-out;
-        font-size: 1rem;
+        color: #f8f9fa;
       }
 
-      /* Footer */
-      footer {
-        border-top: 1px solid #343a40;
-      }
-      footer a {
-        color: #0dcaf0;
-        text-decoration: none;
-        transition: color 0.2s ease-in-out;
-      }
-      footer a:hover {
-        color: #67e8f9;
-        text-decoration: underline;
+      /* Crossword Styles */
+      .crossword-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2rem;
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
       }
 
-      /* Responsive Enhancements */
-      @media (max-width: 768px) {
-        /* Used in TicTacToe, Connect4 to stack player displays */
-        .player-display-container-responsive {
-            flex-direction: column;
-            gap: 1rem !important;
+      @media (min-width: 992px) {
+        .crossword-container {
+          flex-direction: row;
+          align-items: flex-start;
         }
       }
 
-      @media (max-width: 576px) {
-        /* General adjustments */
-        .p-sm-4 { padding: 1rem !important; }
-        .p-md-5 { padding: 1.5rem !important; }
-        .display-3 { font-size: 2.5rem; }
-        .display-5 { font-size: 1.9rem; }
-        .fs-4 { font-size: 1.2rem !important; }
-        .fs-5 { font-size: 1rem !important; }
-        .card-title.h3 { font-size: 1.4rem; }
-        
-        .btn-lg {
-            padding: 0.6rem 1.1rem;
-            font-size: 1rem;
-        }
-        
-        /* Player Display */
-        .player-avatar {
-            width: 35px;
-            height: 35px;
-        }
-        .player-display-name {
-            font-size: 1rem;
-        }
+      .crossword-grid-wrapper {
+        flex-shrink: 0;
+        width: 100%;
+        max-width: 600px;
+        background-color: #1a1d20;
+        padding: 1rem;
+        border-radius: 0.5rem;
+      }
+      
+      .crossword-grid {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        gap: 2px;
+      }
 
-        /* Gobblet Gobblers Home Piles */
-        .gg-home-pile-cell {
-            width: clamp(65px, 22vw, 80px) !important;
-            height: clamp(65px, 22vw, 80px) !important;
-        }
-        .gg-home-piles-container {
-            gap: 0.75rem !important;
-        }
+      .crossword-cell {
+        position: relative;
+        background-color: #495057;
+        color: #f8f9fa;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-weight: bold;
+        font-size: clamp(0.7rem, 2.5vw, 1.2rem);
+        text-transform: uppercase;
+        border-radius: 2px;
+      }
+      
+      .crossword-cell.blocked {
+        background-color: transparent;
+      }
+      
+      .crossword-cell.revealed {
+          background-color: #6c757d;
+          color: #ced4da;
+      }
+      
+      .crossword-cell .cell-number {
+        position: absolute;
+        top: 2px;
+        left: 3px;
+        font-size: clamp(0.5rem, 1.5vw, 0.7rem);
+        font-weight: normal;
+        color: #ced4da;
+      }
 
-        /* Chess Captured Pieces & Player Bar */
-        .captured-pieces-container {
-            min-height: 24px;
-            flex-wrap: wrap;
-            justify-content: flex-end;
-            max-width: 65%; /* Prevent excessive wrapping */
-        }
-        .captured-piece {
-            font-size: 18px;
-        }
-        .chess-player-bar {
-            flex-direction: column;
-            align-items: flex-start !important;
-            gap: 0.5rem;
-        }
-
-        /* Chat Panel */
-        .chat-panel-container {
-            bottom: 10px;
-            right: 10px;
-        }
-        .chat-panel-container > .btn {
-            width: 45px;
-            height: 45px;
-            font-size: 1.2rem;
-            line-height: 1;
-        }
-        
-        /* Game Icon Grid */
-        .game-icon-grid {
-          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-          gap: 1.5rem 1rem;
-        }
-        .game-icon-title {
-          font-size: 0.9rem;
-        }
+      .crossword-clues {
+        flex-grow: 1;
+        width: 100%;
+        max-width: 600px;
+        background-color: #343a40;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        align-self: stretch;
+      }
+      
+      .clue-item {
+        margin-bottom: 0.5rem;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+      }
+      
+      .clue-item:not(.text-muted):hover {
+         background-color: #495057;
+      }
+      
+      /* Gobblet Gobblers Home Piles */
+      .gg-home-piles-container {
+        width: clamp(250px, 80vw, 350px);
+      }
+      .gg-home-pile-cell {
+        width: clamp(60px, 20vw, 90px);
+        aspect-ratio: 1 / 1;
       }
 
     </style>
@@ -398,26 +396,31 @@
     "react/": "https://aistudiocdn.com/react@^19.1.1/",
     "react": "https://aistudiocdn.com/react@^19.1.1",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
-    "react-chessboard": "https://aistudiocdn.com/react-chessboard@^4.3.1"
+    "react-chessboard": "https://aistudiocdn.com/react-chessboard@^5.6.1"
   }
 }
 </script>
 </head>
-  <body class="bg-dark text-light">
+  <body>
     <div id="root"></div>
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-    <!-- Chess.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script type="module" src="/index.tsx"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script>
+      // Ganti dengan konfigurasi Firebase Anda
       const firebaseConfig = {
-        databaseURL: "https://nirkyy-game-default-rtdb.firebaseio.com/",
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        databaseURL: "https://nkgame-11d51-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+        appId: "YOUR_APP_ID"
       };
+      // Inisialisasi Firebase
       firebase.initializeApp(firebaseConfig);
     </script>
-    
-    <script type="module" src="/index.tsx"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
   </body>
 </html>

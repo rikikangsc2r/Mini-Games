@@ -11,6 +11,7 @@ import TicTacToe from './components/TicTacToe';
 import GobbletGobblers from './components/GobbletGobblers';
 import Chess from './components/Chess';
 import Connect4 from './components/Connect4';
+import Crossword from './components/Crossword';
 import Footer from './components/Footer';
 import Blog from './components/Blog';
 import PlayerStats from './components/PlayerStats';
@@ -75,6 +76,17 @@ const Connect4Icon = () => (
     </svg>
 );
 
+const CrosswordIcon = () => (
+  <svg viewBox="0 0 100 100">
+    <rect x="20" y="20" width="60" height="60" rx="5" fill="#495057" />
+    <path d="M30 50h40 M50 30v40" stroke="#212529" strokeWidth="8"/>
+    <text x="32" y="48" fill="#0dcaf0" fontSize="20" fontFamily="sans-serif" fontWeight="bold">T</text>
+    <text x="52" y="48" fill="#f8f9fa" fontSize="20" fontFamily="sans-serif" fontWeight="bold">E</text>
+    <text x="42" y="68" fill="#f8f9fa" fontSize="20" fontFamily="sans-serif" fontWeight="bold">K</text>
+    <text x="42" y="28" fill="#ffc107" fontSize="20" fontFamily="sans-serif" fontWeight="bold">A</text>
+  </svg>
+);
+
 
 const App: React.FC = () => {
   const [currentGame, setCurrentGame] = useState<GameID>('menu');
@@ -112,6 +124,7 @@ const App: React.FC = () => {
       case 'gobblet': document.title = 'Gobblet Gobblers Multiplayer | NkGame'; break;
       case 'chess': document.title = 'Catur (Chess) Multiplayer | NkGame'; break;
       case 'connect4': document.title = 'Connect 4 Multiplayer | NkGame'; break;
+      case 'crossword': document.title = 'Teka Teki Lontong | NkGame'; break;
       case 'stats': document.title = 'Statistik Pemain | NkGame'; break;
       case 'blog': document.title = 'Blog | NkGame'; break;
       default: document.title = 'NkGame - Koleksi Game Papan Online Multiplayer';
@@ -143,6 +156,12 @@ const App: React.FC = () => {
         description: "Jatuhkan cakram Anda dan jadilah yang pertama mendapatkan empat cakram berturut-turut. Bisakah Anda mengakali lawan?",
         icon: <Connect4Icon />,
     },
+    {
+        id: 'crossword' as GameID,
+        title: "Teka Teki Lontong",
+        description: "Teka-teki silang dengan jawaban nyeleneh dan tak terduga. Uji logika humorismu!",
+        icon: <CrosswordIcon />,
+    },
   ];
 
   const filteredGames = gamesList.filter(game =>
@@ -160,6 +179,7 @@ const App: React.FC = () => {
       case 'gobblet': return <GobbletGobblers onBackToMenu={handleBackToMenu} description={getGameDescription('gobblet')} />;
       case 'chess': return <Chess onBackToMenu={handleBackToMenu} description={getGameDescription('chess')} />;
       case 'connect4': return <Connect4 onBackToMenu={handleBackToMenu} description={getGameDescription('connect4')} />;
+      case 'crossword': return <Crossword onBackToMenu={handleBackToMenu} />;
       case 'stats': return <PlayerStats onBackToMenu={handleBackToMenu} />;
       case 'blog': return <Blog onBackToMenu={handleBackToMenu} />;
       default: return null;

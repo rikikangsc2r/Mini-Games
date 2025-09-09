@@ -63,6 +63,7 @@ const dbKeyToGameId = (dbKey: string): GameStatsID | null => {
         case 'gobblet-games': return 'gobblet';
         case 'chess-games': return 'chess';
         case 'connect4-games': return 'connect4';
+        case 'crossword-games': return 'crossword';
         default: return null;
     }
 };

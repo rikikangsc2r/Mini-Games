@@ -8,6 +8,7 @@ const gameNames: Record<GameStatsID, string> = {
     gobblet: 'Gobblet Gobblers',
     chess: 'Catur',
     connect4: 'Connect 4',
+    crossword: 'Teka Teki Lontong',
 };
 
 const DonutChart: React.FC<{ wins: number; losses: number; draws: number; size?: number }> = ({ wins, losses, draws, size = 150 }) => {

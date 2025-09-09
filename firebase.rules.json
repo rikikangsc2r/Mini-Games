@@ -2,7 +2,7 @@
   "rules": {
     // Apply a common set of security rules to all game types
     "$game_key": {
-      ".validate": "$game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'chess-games' || $game_key === 'connect4-games'",
+      ".validate": "$game_key === 'games' || $game_key === 'gobblet-games' || $game_key === 'chess-games' || $game_key === 'connect4-games' || $game_key === 'crossword-games'",
       
       "$room_id": {
         // Anyone can read a game's state. This is required for the "share room ID" feature to work.
@@ -120,6 +120,19 @@
         "lastMove": {
              ".validate": "($game_key === 'chess-games' || $game_key === 'gobblet-games') ? !newData.exists() || newData.val() === null || newData.hasChildren() : !newData.exists()"
         },
+        "puzzle": {
+            ".validate": "$game_key === 'crossword-games' ? !newData.exists() || newData.val() === null || newData.hasChildren(['words', 'clues', 'width', 'height']) : !newData.exists()"
+        },
+        "gameState": {
+            ".validate": "$game_key === 'crossword-games' ? !newData.exists() || newData.hasChildren() : !newData.exists()"
+        },
+        "scores": {
+            ".validate": "$game_key === 'crossword-games' ? newData.exists() && newData.hasChildren(['X', 'O']) && newData.child('X').isNumber() && newData.child('O').isNumber() : !newData.exists()"
+        },
+        "chances": {
+            ".validate": "$game_key === 'crossword-games' ? newData.exists() && newData.hasChildren(['X', 'O']) && newData.child('X').isNumber() && newData.child('O').isNumber() && newData.child('X').val() >= 0 && newData.child('X').val() <= 3 && newData.child('O').val() >= 0 && newData.child('O').val() <= 3 : !newData.exists()"
+        },
+
 
         // Disallow any other unknown top-level properties
         "$other": {
@@ -127,7 +140,8 @@
             $other === 'players' || $other === 'createdAt' || $other === 'currentPlayer' ||
             $other === 'startingPlayer' || $other === 'rematch' || $other === 'winner' ||
             $other === 'board' || $other === 'winningLine' || $other === 'homePiles' ||
-            $other === 'fen' || $other === 'lastMove' || $other === 'chatMessages'
+            $other === 'fen' || $other === 'lastMove' || $other === 'chatMessages' ||
+            $other === 'puzzle' || $other === 'gameState' || $other === 'scores' || $other === 'chances'
           "
         }
       }

@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect } from 'react';
 
-export type GameStatsID = 'tictactoe' | 'gobblet' | 'chess' | 'connect4';
+export type GameStatsID = 'tictactoe' | 'gobblet' | 'chess' | 'connect4' | 'crossword';
 export type GameResult = 'win' | 'loss' | 'draw';
 
 export interface SingleGameStats {
@@ -18,6 +18,7 @@ const createInitialStats = (): AllGameStats => ({
     gobblet: { wins: 0, losses: 0, draws: 0 },
     chess: { wins: 0, losses: 0, draws: 0 },
     connect4: { wins: 0, losses: 0, draws: 0 },
+    crossword: { wins: 0, losses: 0, draws: 0 },
 });
 
 const getStats = (): AllGameStats => {
